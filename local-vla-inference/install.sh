@@ -130,10 +130,26 @@ UV_NO_BUILD_ISOLATION=1 \
 log "Syncing full workspace into $VENV_DIR"
 uv sync -p "$VENV_DIR/bin/python" --all-packages
 
+# Unitree's setup.py omits package_data, so wheel builds drop the prebuilt CRC
+# shared objects (utils/lib/crc_*.so). Restore them from the upstream repo.
+log "Restoring unitree_sdk2py CRC shared libraries"
+SDK_DIR="$("$VENV_DIR/bin/python" -c 'import unitree_sdk2py, os; print(os.path.dirname(unitree_sdk2py.__file__))')"
+mkdir -p "$SDK_DIR/utils/lib"
+for so in crc_amd64.so crc_aarch64.so; do
+  if [[ ! -f "$SDK_DIR/utils/lib/$so" ]]; then
+    curl -fsSL \
+      "https://raw.githubusercontent.com/unitreerobotics/unitree_sdk2_python/master/unitree_sdk2py/utils/lib/$so" \
+      -o "$SDK_DIR/utils/lib/$so"
+    echo "  fetched $so"
+  fi
+done
+
 log "Verifying imports"
 "$VENV_DIR/bin/python" - <<'PY'
 import cyclonedds
 import unitree_sdk2py
+from unitree_sdk2py.utils.crc import CRC
+CRC()
 print("ok:", cyclonedds.__file__)
 PY
 
