@@ -5,5 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "lerobot[dataset,training]>=0.6.0",
+    "lerobot[dataset,training]",
+    "modal>=1.5.2",
 ]
+
+[tool.uv.sources]
+lerobot = { workspace = true }
