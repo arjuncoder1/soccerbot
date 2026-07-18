@@ -6,7 +6,11 @@ requires-python = ">=3.13"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["training", "thirdparty/lerobot"]
+members = [
+    "training",
+    "thirdparty/lerobot",
+    "soccerbot",
+]
 
 [tool.uv]
 package = false
