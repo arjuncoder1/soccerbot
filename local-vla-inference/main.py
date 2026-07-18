@@ -55,9 +55,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--camera",
-        default="teleimager://192.168.123.164",
-        help="Front camera source: 'teleimager://HOST' (Unitree teleimager on the robot; "
-        "auto-detects head-cam port/binocular via :60000), 'zmq://HOST:PORT', "
+        default="zmq://192.168.123.164:55555",
+        help="Front camera source: 'zmq://HOST:PORT' (teleimager head-cam stream, verified on "
+        ":55555), 'teleimager://HOST' (auto-detect port/binocular via :60000), "
         "or 'opencv:N' (camera on this machine).",
     )
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
