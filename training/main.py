@@ -83,6 +83,7 @@ train_image = (
     .add_local_dir(
         str(LEROBOT_ROOT),
         remote_path="/opt/lerobot",
+        copy=True,
         ignore=[
             "**/.git/**",
             "**/.venv/**",
