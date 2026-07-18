@@ -1,5 +1,5 @@
 [project]
-name = "soccerbot"
+name = "soccerbot-workspace"
 version = "0.1.0"
 description = "Soccerbot workspace"
 requires-python = ">=3.13"
