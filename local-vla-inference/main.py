@@ -4,15 +4,16 @@ Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D). We command the
 14 arm joints via the official ``rt/arm_sdk`` DDS topic and zero-pad /
 ignore the last 2 dims.
 
-Everything runs on this machine — direct DDS to the robot's stock services:
-  - state:   subscribe ``rt/lowstate``
-  - arms:    publish ``rt/arm_sdk`` (weight joint 29)
-  - camera:  Unitree ``VideoClient`` front cam
+Everything runs on this machine:
+  - state:   subscribe ``rt/lowstate`` (DDS)
+  - arms:    publish ``rt/arm_sdk`` (DDS, weight joint 29)
+  - camera:  Unitree teleop ``image_server`` already running on the robot
+             (``--camera zmq://HOST:PORT``), or a local camera (``opencv:N``)
 
 Usage:
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
-    ./local-vla-inference/run.sh --iface eth0
+    ./local-vla-inference/run.sh --iface eth0 --camera zmq://192.168.123.164:5555
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from embodiment_g1d_16d import (
     UNUSED_PAD,
     dataset_features,
 )
-from front_camera import UnitreeFrontCamera
+from front_camera import make_front_camera
 from g1_arms import G1Arms
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Network interface connected to the robot (e.g. eth0, enp2s0). "
         "Omit to use the DDS default.",
+    )
+    p.add_argument(
+        "--camera",
+        default="zmq://192.168.123.164:5555",
+        help="Front camera source: 'zmq://HOST:PORT' (Unitree image_server already on the robot) "
+        "or 'opencv:N' (camera attached to this machine).",
     )
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
     p.add_argument("--duration", type=float, default=60.0, help="Seconds to run (0 = forever).")
@@ -139,7 +146,7 @@ def run(args: argparse.Namespace) -> None:
         ChannelFactoryInitialize(0)
 
     arms = G1Arms(kp=args.kp, kd=args.kd)
-    front = UnitreeFrontCamera()
+    front = make_front_camera(args.camera)
 
     arms.connect()
     front.connect()
