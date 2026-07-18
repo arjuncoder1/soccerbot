@@ -15,6 +15,24 @@ need_cmd() {
   }
 }
 
+ensure_build_deps() {
+  if command -v cmake >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1; then
+    return
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing cmake + build-essential via apt..."
+    sudo apt-get update -y
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cmake build-essential git
+  elif command -v brew >/dev/null 2>&1; then
+    echo "Installing cmake via Homebrew..."
+    brew install cmake
+  else
+    echo "error: need cmake and a C++ compiler (install cmake / build-essential)" >&2
+    exit 1
+  fi
+}
+
+ensure_build_deps
 need_cmd git
 need_cmd cmake
 need_cmd uv
