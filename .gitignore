@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.cursor/
+# Vendored LeRobot test binaries (avoid Git LFS)
+thirdparty/lerobot/tests/artifacts/
