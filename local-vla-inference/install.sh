@@ -118,8 +118,9 @@ cd "$REPO_ROOT"
 rm -rf "$VENV_DIR"
 uv venv "$VENV_DIR" --python "$PYTHON_BIN"
 
-log "Building/installing cyclonedds==0.10.2 into venv first"
-# Force a non-isolated build so CPATH/CFLAGS reach the extension compile.
+log "Installing setuptools/wheel, then building cyclonedds==0.10.2"
+uv pip install --python "$VENV_DIR/bin/python" setuptools wheel
+# Non-isolated build so CPATH/CFLAGS and setuptools reach the extension compile.
 UV_NO_BUILD_ISOLATION=1 \
   uv pip install \
     --python "$VENV_DIR/bin/python" \

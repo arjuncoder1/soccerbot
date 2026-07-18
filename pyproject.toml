@@ -18,5 +18,7 @@ members = [
 
 [tool.uv]
 package = false
+
 # cyclonedds 0.10.2 builds with setuptools but does not declare it.
-extra-build-dependencies = { cyclonedds = ["setuptools", "wheel"] }
+[tool.uv.extra-build-dependencies]
+cyclonedds = ["setuptools", "wheel"]
