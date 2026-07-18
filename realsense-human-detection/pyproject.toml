@@ -1,0 +1,23 @@
+[project]
+name = "realsense-human-detection"
+version = "0.1.0"
+description = "One-frame human detection (bbox + depth + avoidance guidance) for RealSense / RGB-D"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.2.6",
+    "opencv-python>=4.13.0.92",
+    "ultralytics>=8.4.101",
+    # No macOS arm64 wheels exist; only needed on the robot anyway.
+    "pyrealsense2>=2.55 ; sys_platform == 'linux'",
+]
+
+[project.scripts]
+realsense-human-detect = "realsense_human_detection.live:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/realsense_human_detection"]

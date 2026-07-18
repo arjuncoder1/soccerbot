@@ -1,4 +1,4 @@
-"""Back-compat shim — prefer ``realsense_human_detection`` or ``main.py``."""
+"""CLI entry: live RealSense human detection."""
 
 from realsense_human_detection.live import main
 
