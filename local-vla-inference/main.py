@@ -1,13 +1,18 @@
 """Run ACT inference on Unitree G1D arms only (no hands / fingers).
 
-Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D).
+Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D). We command the
+14 arm joints via the official ``rt/arm_sdk`` DDS topic and zero-pad /
+ignore the last 2 dims.
 
-Camera: Unitree **onboard front cam** via existing ``VideoClient`` (no extra
-software / ImageServer / OpenCV capture on the robot). That frame is copied
-into all 4 policy image inputs.
+Everything runs on this machine — direct DDS to the robot's stock services:
+  - state:   subscribe ``rt/lowstate``
+  - arms:    publish ``rt/arm_sdk`` (weight joint 29)
+  - camera:  Unitree ``VideoClient`` front cam
+
+Usage:
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
-    ./local-vla-inference/run.sh --robot-ip 192.168.123.164
+    ./local-vla-inference/run.sh --iface eth0
 """
 
 from __future__ import annotations
@@ -29,25 +34,27 @@ from embodiment_g1d_16d import (
     dataset_features,
 )
 from front_camera import UnitreeFrontCamera
+from g1_arms import G1Arms
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="ACT inference for G1D arms-only + Unitree front VideoClient."
+        description="ACT inference for G1D arms-only via direct DDS (rt/arm_sdk)."
     )
     p.add_argument("--policy", default=DEFAULT_POLICY_ID, help="Hub repo id or local checkpoint path.")
     p.add_argument("--device", default=None, help="cuda / cpu / mps (default: cuda if available).")
-    p.add_argument("--robot-ip", default="192.168.123.164", help="G1 robot IP for DDS bridge.")
+    p.add_argument(
+        "--iface",
+        default=None,
+        help="Network interface connected to the robot (e.g. eth0, enp2s0). "
+        "Omit to use the DDS default.",
+    )
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
     p.add_argument("--duration", type=float, default=60.0, help="Seconds to run (0 = forever).")
-    p.add_argument(
-        "--simulation",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Use LeRobot UnitreeG1 simulation mode.",
-    )
+    p.add_argument("--kp", type=float, default=60.0, help="Arm joint position gain.")
+    p.add_argument("--kd", type=float, default=1.5, help="Arm joint damping gain.")
     p.add_argument(
         "--dry-run",
         action="store_true",
@@ -66,38 +73,18 @@ def resolve_device(name: str | None) -> torch.device:
     return torch.device("cpu")
 
 
-def build_robot(args: argparse.Namespace):
-    from lerobot.robots.unitree_g1 import UnitreeG1, UnitreeG1Config
-
-    # No cameras on the LeRobot robot config — front cam is VideoClient only.
-    cfg = UnitreeG1Config(
-        id="g1d_act",
-        is_simulation=args.simulation,
-        robot_ip=args.robot_ip,
-        cameras={},
-        controller=None,
-        gravity_compensation=False,
-    )
-    return UnitreeG1(cfg)
-
-
-def pack_observation(robot_obs: dict[str, Any], front_rgb: np.ndarray) -> dict[str, Any]:
+def pack_observation(arm_obs: dict[str, float], front_rgb: np.ndarray) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for joint in ARM_JOINTS:
         key = f"{joint}.q"
-        if key not in robot_obs:
-            raise KeyError(f"Missing arm joint in robot observation: {key}")
-        out[key] = float(robot_obs[key])
+        if key not in arm_obs:
+            raise KeyError(f"Missing arm joint in observation: {key}")
+        out[key] = arm_obs[key]
     for pad in UNUSED_PAD:
         out[pad] = 0.0
     for cam in CAMERA_KEYS:
         out[cam] = front_rgb
     return out
-
-
-def send_arm_action(robot, action: dict[str, float]) -> None:
-    arm_only = {f"{j}.q": action[f"{j}.q"] for j in ARM_JOINTS}
-    robot.send_action(arm_only)
 
 
 def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
@@ -115,8 +102,10 @@ def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
     batch = preprocess(frame)
     action = policy.select_action(batch)
     action = postprocess(action)
-    _ = make_robot_action(action, features)
-    logger.info("Dry-run OK (arms only; front VideoClient not used).")
+    robot_action = make_robot_action(action, features)
+    arm_keys = [f"{j}.q" for j in ARM_JOINTS]
+    logger.info("Dry-run OK. Arm action dims=%d", len(arm_keys))
+    logger.info("Sample arm action: %s", {k: round(robot_action[k], 4) for k in arm_keys[:4]})
 
 
 def run(args: argparse.Namespace) -> None:
@@ -141,26 +130,28 @@ def run(args: argparse.Namespace) -> None:
         dry_run(policy, preprocess, postprocess, device)
         return
 
-    h, w, _ = IMAGE_SHAPE
-    robot = build_robot(args)
+    # One DDS init per process; shared by arms + camera clients.
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+
+    if args.iface:
+        ChannelFactoryInitialize(0, args.iface)
+    else:
+        ChannelFactoryInitialize(0)
+
+    arms = G1Arms(kp=args.kp, kd=args.kd)
     front = UnitreeFrontCamera()
 
-    robot.connect()
-    # DDS is up after robot.connect(); VideoClient uses the robot's existing service.
-    try:
-        front.connect()
-    except Exception:
-        logger.error(
-            "Could not read Unitree front camera via VideoClient. "
-            "Nothing was started on the robot — this uses the stock camera service only."
-        )
-        robot.disconnect()
-        raise
+    arms.connect()
+    front.connect()
 
+    # Engage arm_sdk smoothly at the current pose before the policy takes over.
+    arms.hold_current_pose(ramp_s=2.0)
+
+    h, w, _ = IMAGE_SHAPE
     dt = 1.0 / args.fps
     t0 = time.time()
     step = 0
-    logger.info("ACT loop @ %.1f Hz | Unitree front VideoClient → %s", args.fps, CAMERA_KEYS)
+    logger.info("ACT loop @ %.1f Hz via rt/arm_sdk (Ctrl+C to stop)", args.fps)
 
     try:
         while True:
@@ -170,14 +161,14 @@ def run(args: argparse.Namespace) -> None:
                 break
 
             front_rgb = front.read_resized(h, w)
-            obs = pack_observation(robot.get_observation(), front_rgb)
+            obs = pack_observation(arms.get_arm_positions(), front_rgb)
             frame = build_inference_frame(observation=obs, ds_features=features, device=device)
             batch = preprocess(frame)
             with torch.inference_mode():
                 action = policy.select_action(batch)
             action = postprocess(action)
             robot_action = make_robot_action(action, features)
-            send_arm_action(robot, robot_action)
+            arms.send_arm_positions(robot_action)
 
             step += 1
             if step % int(args.fps) == 0:
@@ -190,7 +181,7 @@ def run(args: argparse.Namespace) -> None:
         logger.info("Interrupted")
     finally:
         front.disconnect()
-        robot.disconnect()
+        arms.disconnect()  # ramps arm_sdk weight back to 0
         logger.info("Disconnected")
 
 
