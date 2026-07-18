@@ -1,16 +1,10 @@
 """Run ACT inference on Unitree G1D arms only (no hands / fingers).
 
-Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D). We command the
-14 arm joints and zero-pad / ignore the last 2 dims.
+Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D).
 
-Camera: **one remote Unitree front cam over ZMQ** (ImageServer on the robot).
-That frame is copied into all 4 policy image inputs.
-
-On the robot (separate terminal), start the image server, e.g.:
-
-    python -m lerobot.robots.unitree_g1.run_g1_server --camera --camera-device 4
-
-Then on the client:
+Camera: Unitree **onboard front cam** via existing ``VideoClient`` (no extra
+software / ImageServer / OpenCV capture on the robot). That frame is copied
+into all 4 policy image inputs.
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
     ./local-vla-inference/run.sh --robot-ip 192.168.123.164
@@ -34,31 +28,18 @@ from embodiment_g1d_16d import (
     UNUSED_PAD,
     dataset_features,
 )
+from front_camera import UnitreeFrontCamera
 
 logger = logging.getLogger(__name__)
-
-# Physical remote cam key on the robot (must match ImageServer publish name).
-FRONT_CAMERA_KEY = "front"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="ACT inference for G1D arms-only — remote Unitree front ZMQ camera."
+        description="ACT inference for G1D arms-only + Unitree front VideoClient."
     )
     p.add_argument("--policy", default=DEFAULT_POLICY_ID, help="Hub repo id or local checkpoint path.")
     p.add_argument("--device", default=None, help="cuda / cpu / mps (default: cuda if available).")
-    p.add_argument("--robot-ip", default="192.168.123.164", help="G1 robot IP (DDS).")
-    p.add_argument(
-        "--camera-host",
-        default=None,
-        help="ZMQ image server host (default: same as --robot-ip).",
-    )
-    p.add_argument("--camera-port", type=int, default=5555, help="ZMQ image server port.")
-    p.add_argument(
-        "--camera-name",
-        default="head_camera",
-        help="Camera name inside the ZMQ JSON payload (Unitree default: head_camera).",
-    )
+    p.add_argument("--robot-ip", default="192.168.123.164", help="G1 robot IP for DDS bridge.")
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
     p.add_argument("--duration", type=float, default=60.0, help="Seconds to run (0 = forever).")
     p.add_argument(
@@ -85,55 +66,22 @@ def resolve_device(name: str | None) -> torch.device:
     return torch.device("cpu")
 
 
-def resize_front_frame(frame: np.ndarray) -> np.ndarray:
-    import cv2
-
-    h, w, _ = IMAGE_SHAPE
-    if frame.shape[0] != h or frame.shape[1] != w:
-        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_LINEAR)
-    if frame.dtype != np.uint8:
-        frame = frame.astype(np.uint8)
-    return frame
-
-
 def build_robot(args: argparse.Namespace):
-    from lerobot.cameras.zmq import ZMQCameraConfig
     from lerobot.robots.unitree_g1 import UnitreeG1, UnitreeG1Config
 
-    h, w, _ = IMAGE_SHAPE
-    cam_host = args.camera_host or args.robot_ip
-    cameras = {
-        FRONT_CAMERA_KEY: ZMQCameraConfig(
-            server_address=cam_host,
-            port=args.camera_port,
-            camera_name=args.camera_name,
-            width=w,
-            height=h,
-            fps=int(args.fps),
-            timeout_ms=10_000,
-            warmup_s=5,
-        )
-    }
+    # No cameras on the LeRobot robot config — front cam is VideoClient only.
     cfg = UnitreeG1Config(
         id="g1d_act",
         is_simulation=args.simulation,
         robot_ip=args.robot_ip,
-        cameras=cameras,
+        cameras={},
         controller=None,
         gravity_compensation=False,
-    )
-    logger.info(
-        "Remote front cam: zmq://%s:%s name=%s → policy keys %s",
-        cam_host,
-        args.camera_port,
-        args.camera_name,
-        CAMERA_KEYS,
     )
     return UnitreeG1(cfg)
 
 
-def pack_observation(robot_obs: dict[str, Any]) -> dict[str, Any]:
-    """Map arms + remote front cam; replicate into all policy image keys."""
+def pack_observation(robot_obs: dict[str, Any], front_rgb: np.ndarray) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for joint in ARM_JOINTS:
         key = f"{joint}.q"
@@ -142,12 +90,8 @@ def pack_observation(robot_obs: dict[str, Any]) -> dict[str, Any]:
         out[key] = float(robot_obs[key])
     for pad in UNUSED_PAD:
         out[pad] = 0.0
-
-    if FRONT_CAMERA_KEY not in robot_obs:
-        raise KeyError(f"Missing remote front camera frame ({FRONT_CAMERA_KEY}).")
-    front = resize_front_frame(np.asarray(robot_obs[FRONT_CAMERA_KEY]))
     for cam in CAMERA_KEYS:
-        out[cam] = front
+        out[cam] = front_rgb
     return out
 
 
@@ -171,9 +115,8 @@ def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
     batch = preprocess(frame)
     action = policy.select_action(batch)
     action = postprocess(action)
-    robot_action = make_robot_action(action, features)
-    arm_keys = [f"{j}.q" for j in ARM_JOINTS]
-    logger.info("Dry-run OK. Arm dims=%d; remote front cam → %s", len(arm_keys), CAMERA_KEYS)
+    _ = make_robot_action(action, features)
+    logger.info("Dry-run OK (arms only; front VideoClient not used).")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -198,26 +141,26 @@ def run(args: argparse.Namespace) -> None:
         dry_run(policy, preprocess, postprocess, device)
         return
 
+    h, w, _ = IMAGE_SHAPE
     robot = build_robot(args)
-    cam_host = args.camera_host or args.robot_ip
+    front = UnitreeFrontCamera()
+
+    robot.connect()
+    # DDS is up after robot.connect(); VideoClient uses the robot's existing service.
     try:
-        robot.connect()
+        front.connect()
     except Exception:
         logger.error(
-            "Failed to connect. Is the robot ImageServer running?\n"
-            "  On the G1:  python -m lerobot.robots.unitree_g1.run_g1_server "
-            "--camera --camera-device 4 --camera-port %s\n"
-            "  Then:       ./local-vla-inference/run.sh --robot-ip %s --camera-host %s",
-            args.camera_port,
-            args.robot_ip,
-            cam_host,
+            "Could not read Unitree front camera via VideoClient. "
+            "Nothing was started on the robot — this uses the stock camera service only."
         )
+        robot.disconnect()
         raise
 
     dt = 1.0 / args.fps
     t0 = time.time()
     step = 0
-    logger.info("ACT loop @ %.1f Hz (Ctrl+C to stop)", args.fps)
+    logger.info("ACT loop @ %.1f Hz | Unitree front VideoClient → %s", args.fps, CAMERA_KEYS)
 
     try:
         while True:
@@ -226,7 +169,8 @@ def run(args: argparse.Namespace) -> None:
                 logger.info("Duration reached (%.1fs); stopping", args.duration)
                 break
 
-            obs = pack_observation(robot.get_observation())
+            front_rgb = front.read_resized(h, w)
+            obs = pack_observation(robot.get_observation(), front_rgb)
             frame = build_inference_frame(observation=obs, ds_features=features, device=device)
             batch = preprocess(frame)
             with torch.inference_mode():
@@ -245,6 +189,7 @@ def run(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         logger.info("Interrupted")
     finally:
+        front.disconnect()
         robot.disconnect()
         logger.info("Disconnected")
 
