@@ -5,12 +5,8 @@ description = "Modal launcher for LeRobot policy training"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "lerobot[dataset,training,groot,molmoact2]",
     "modal>=1.5.2",
 ]
-
-[tool.uv.sources]
-lerobot = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["."]
