@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from embodiment_g1_revo2 import STATE_ACTION_DIM, STATE_ACTION_NAMES
+from embodiment_g1 import STATE_ACTION_DIM, STATE_ACTION_NAMES
 from main import (
     TrainRequest,
     build_lerobot_args,
@@ -118,17 +118,15 @@ def test_build_lerobot_args_optional_overrides(tmp_path: Path) -> None:
     assert "--policy.tune_projector=true" in args
     assert "--policy.tune_diffusion_model=true" in args
     assert "--policy.use_relative_actions=true" in args
-    assert '--policy.relative_exclude_joints=["hand"]' in args
+    assert all(not a.startswith("--policy.relative_exclude_joints=") for a in args)
 
 
-def test_state_action_layout_is_26() -> None:
-    assert len(STATE_ACTION_NAMES) == STATE_ACTION_DIM == 26
+def test_state_action_layout_is_14() -> None:
+    assert len(STATE_ACTION_NAMES) == STATE_ACTION_DIM == 14
     assert STATE_ACTION_NAMES[0] == "left_arm_shoulder_pitch"
+    assert STATE_ACTION_NAMES[6] == "left_arm_wrist_yaw"
     assert STATE_ACTION_NAMES[7] == "right_arm_shoulder_pitch"
-    assert STATE_ACTION_NAMES[14] == "left_hand_thumb_flex"
-    assert STATE_ACTION_NAMES[15] == "left_hand_thumb_aux"
-    assert STATE_ACTION_NAMES[20] == "right_hand_thumb_flex"
-    assert STATE_ACTION_NAMES[-1] == "right_hand_pinky"
+    assert STATE_ACTION_NAMES[-1] == "right_arm_wrist_yaw"
 
 
 def test_parse_args_and_request(tmp_path: Path) -> None:
@@ -228,5 +226,5 @@ def test_groot_rejects_mismatched_local_dataset(tmp_path: Path) -> None:
     args = parse_args(
         ["--dataset", str(ds), "--policy", "groot", "--steps", "100"]
     )
-    with pytest.raises(ValueError, match="G1\\+Revo2"):
+    with pytest.raises(ValueError, match="G1 arms-only"):
         request_from_args(args)

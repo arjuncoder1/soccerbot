@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 
 import modal
 
-from embodiment_g1_revo2 import (
+from embodiment_g1 import (
     BASE_MODEL_PATH,
     EMBODIMENT_TAG,
     validate_dataset_layout,
@@ -257,7 +257,7 @@ def build_lerobot_args(req: TrainRequest) -> list[str]:
         args.append(f"--log_freq={req.log_freq}")
 
     if req.policy == "groot":
-        # G1 + Revo 2: freeze VLM, train DiT action head + projector, no LoRA.
+        # G1 arms-only: freeze VLM, train DiT action head + projector, no LoRA.
         args.extend(
             [
                 f"--policy.base_model_path={BASE_MODEL_PATH}",
@@ -270,8 +270,6 @@ def build_lerobot_args(req: TrainRequest) -> list[str]:
                 "--policy.tune_vlln=true",
                 "--policy.use_bf16=true",
                 "--policy.use_relative_actions=true",
-                # Keep Revo hand joints absolute; arms stay relative.
-                '--policy.relative_exclude_joints=["hand"]',
             ]
         )
     elif req.policy == "molmoact2":
@@ -507,7 +505,7 @@ def submit_training(req: TrainRequest) -> int:
     if req.policy == "groot":
         print(
             f"Groot: {BASE_MODEL_PATH} embodiment={EMBODIMENT_TAG} "
-            "(backbone frozen, DiT+projector trainable, no LoRA, 26-D G1+Revo2)"
+            "(backbone frozen, DiT+projector trainable, no LoRA, 14-D G1 arms-only)"
         )
     if req.lr is None:
         print("Learning rate: policy default preset")
