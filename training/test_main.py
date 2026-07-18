@@ -138,3 +138,42 @@ def test_push_to_hub_requires_repo_id() -> None:
     args = parse_args(["--dataset", "user/ds", "--push-to-hub"])
     with pytest.raises(ValueError, match="policy-repo-id"):
         request_from_args(args)
+
+
+def test_molmoact2_defaults_to_lora() -> None:
+    args = parse_args(
+        ["--dataset", "user/ds", "--policy", "molmoact2", "--steps", "1000"]
+    )
+    req = request_from_args(args)
+    assert req.only_action_expert_ft is False
+    lerobot_args = build_lerobot_args(req)
+    assert "--policy.enable_lora_vlm=true" in lerobot_args
+    assert all(not a.startswith("--policy.train_action_expert_only=") for a in lerobot_args)
+
+
+def test_molmoact2_onlyactionexpertft() -> None:
+    args = parse_args(
+        [
+            "--dataset",
+            "user/ds",
+            "--policy",
+            "molmoact2",
+            "--steps",
+            "1000",
+            "--onlyactionexpertft",
+        ]
+    )
+    req = request_from_args(args)
+    assert req.only_action_expert_ft is True
+    lerobot_args = build_lerobot_args(req)
+    assert "--policy.train_action_expert_only=true" in lerobot_args
+    assert "--policy.enable_lora_vlm=false" in lerobot_args
+    assert "--policy.action_mode=continuous" in lerobot_args
+
+
+def test_onlyactionexpertft_requires_molmoact2() -> None:
+    args = parse_args(
+        ["--dataset", "user/ds", "--policy", "act", "--onlyactionexpertft"]
+    )
+    with pytest.raises(ValueError, match="molmoact2"):
+        request_from_args(args)

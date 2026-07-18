@@ -131,6 +131,7 @@ class TrainRequest:
     num_workers: int | None = None
     save_freq: int | None = None
     log_freq: int | None = None
+    only_action_expert_ft: bool = False
     extra_args: tuple[str, ...] = ()
 
 
@@ -249,6 +250,20 @@ def build_lerobot_args(req: TrainRequest) -> list[str]:
     if req.log_freq is not None:
         args.append(f"--log_freq={req.log_freq}")
 
+    if req.policy == "molmoact2":
+        # Default finetune mode is LoRA on the VLM; --onlyactionexpertft switches
+        # to freezing everything except the action expert (requires continuous mode).
+        if req.only_action_expert_ft:
+            args.extend(
+                [
+                    "--policy.train_action_expert_only=true",
+                    "--policy.enable_lora_vlm=false",
+                    "--policy.action_mode=continuous",
+                ]
+            )
+        else:
+            args.append("--policy.enable_lora_vlm=true")
+
     args.extend(req.extra_args)
     return args
 
@@ -343,6 +358,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional logging frequency override.",
     )
     parser.add_argument(
+        "--onlyactionexpertft",
+        dest="only_action_expert_ft",
+        action="store_true",
+        default=False,
+        help=(
+            "MolmoAct2 only: finetune the action expert only "
+            "(sets train_action_expert_only + action_mode=continuous, disables LoRA). "
+            "Default molmoact2 mode keeps enable_lora_vlm=true."
+        ),
+    )
+    parser.add_argument(
         "--extra-arg",
         action="append",
         default=[],
@@ -363,6 +389,8 @@ def request_from_args(args: argparse.Namespace) -> TrainRequest:
     push_to_hub = bool(args.push_to_hub or args.policy_repo_id)
     if args.push_to_hub and not args.policy_repo_id:
         raise ValueError("--push-to-hub requires --policy-repo-id.")
+    if args.only_action_expert_ft and args.policy != "molmoact2":
+        raise ValueError("--onlyactionexpertft is only supported with --policy molmoact2.")
 
     return TrainRequest(
         dataset=dataset,
@@ -380,6 +408,7 @@ def request_from_args(args: argparse.Namespace) -> TrainRequest:
         num_workers=args.num_workers,
         save_freq=args.save_freq,
         log_freq=args.log_freq,
+        only_action_expert_ft=args.only_action_expert_ft,
         extra_args=tuple(args.extra_arg or ()),
     )
 
