@@ -73,9 +73,29 @@ install_apt_deps
 need_cmd git
 need_cmd cmake
 need_cmd g++
-need_cmd "python${PYTHON_VERSION}"
 
-PYTHON_BIN="$(command -v "python${PYTHON_VERSION}")"
+# Drop any activated venv so `python3.12` is not resolved to a half-deleted .venv path.
+unset VIRTUAL_ENV
+export PATH="$(echo ":$PATH:" | sed -e 's|:'"$REPO_ROOT"'/\.venv/bin:|:|g' -e 's|^:||' -e 's|:$||')"
+
+# Prefer real system interpreter (absolute path). Never use .venv/bin/python*.
+PYTHON_BIN=""
+for cand in \
+  "/usr/bin/python${PYTHON_VERSION}" \
+  "/usr/local/bin/python${PYTHON_VERSION}"
+do
+  if [[ -x "$cand" ]]; then
+    PYTHON_BIN="$cand"
+    break
+  fi
+done
+if [[ -z "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v "python${PYTHON_VERSION}" || true)"
+fi
+[[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]] || die "python${PYTHON_VERSION} not found (install python${PYTHON_VERSION})"
+# Refuse a path inside the target venv (common when shell still has old .venv on PATH).
+[[ "$PYTHON_BIN" != "$VENV_DIR"/* ]] || die "python resolved to $PYTHON_BIN; deactivate the venv and re-run"
+
 INCLUDE_DIR="$(find_python_h "$PYTHON_BIN")"
 log "Python: $PYTHON_BIN"
 log "Python.h: $INCLUDE_DIR/Python.h"
@@ -94,8 +114,9 @@ export CXXFLAGS="-I${INCLUDE_DIR} ${CXXFLAGS:-}"
 log "CYCLONEDDS_HOME=$CYCLONEDDS_HOME"
 log "Creating root venv with system Python ${PYTHON_VERSION}"
 cd "$REPO_ROOT"
+# Remove old venv AFTER resolving system python, so PATH lookup can't see a dying .venv.
 rm -rf "$VENV_DIR"
-uv venv "$VENV_DIR" -p "$PYTHON_BIN"
+uv venv "$VENV_DIR" --python "$PYTHON_BIN"
 
 log "Building/installing cyclonedds==0.10.2 into venv first"
 # Force a non-isolated build so CPATH/CFLAGS reach the extension compile.
