@@ -1,0 +1,30 @@
+[project]
+name = "remote-vla-inference"
+version = "0.1.0"
+description = "LeRobot async remote VLA inference: Modal PolicyServer + G1 arms-only client"
+requires-python = ">=3.12"
+dependencies = [
+    "modal>=1.5.2",
+    "lerobot",
+    # gRPC is required by both the smoke client and g1_client. Keep it in the
+    # BASE deps (not just the optional `client` extra) so `import grpc` survives
+    # any `uv sync`/`uv run` that omits `--extra client`; otherwise uv prunes it
+    # (it only arrives via lerobot[async] -> lerobot[grpcio-dep]).
+    "grpcio>=1.73.1,<2.0.0",
+    "protobuf>=6.31.1,<8.0.0",
+]
+
+[project.optional-dependencies]
+# Local robot client extras (Modal image installs its own set).
+client = [
+    "lerobot[async,pi,unitree_g1]",
+    "opencv-python-headless>=4.9.0,<4.14.0",
+    # Same as local-vla-inference: unitree needs 3.12 + cyclonedds 0.10.2.
+    "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
+]
+
+[tool.uv.sources]
+lerobot = { workspace = true }
+
+[tool.uv.extra-build-dependencies]
+cyclonedds = ["setuptools", "wheel"]

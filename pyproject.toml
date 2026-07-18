@@ -14,6 +14,7 @@ members = [
     "soccerbot",
     "local-vla-inference",
     "scripted-behavior",
+    "remote-vla-inference",
 ]
 
 [tool.uv]
