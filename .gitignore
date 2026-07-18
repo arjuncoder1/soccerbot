@@ -220,3 +220,4 @@ __marimo__/
 .cursor/
 # Vendored LeRobot test binaries (avoid Git LFS)
 thirdparty/lerobot/tests/artifacts/
+.DS_Store

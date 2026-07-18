@@ -6382,15 +6382,11 @@ name = "training"
 version = "0.1.0"
 source = { virtual = "training" }
 dependencies = [
-    { name = "lerobot", extra = ["dataset", "training"] },
     { name = "modal" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "lerobot", extras = ["dataset", "training"], editable = "thirdparty/lerobot" },
-    { name = "modal", specifier = ">=1.5.2" },
-]
+requires-dist = [{ name = "modal", specifier = ">=1.5.2" }]
 
 [[package]]
 name = "traitlets"
