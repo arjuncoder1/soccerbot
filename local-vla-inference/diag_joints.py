@@ -1,7 +1,13 @@
-"""Log G1 arm joint positions (read-only, publishes nothing).
+"""Log G1 arm joint positions and say which joints are MOVING (read-only).
 
-Same DDS infra as main.py: subscribes ``rt/lowstate`` and prints the 14 arm
-joints. Safe to run any time — no commands are sent to the robot.
+Same DDS infra as main.py: subscribes ``rt/lowstate``. Instead of a wall of
+noisy numbers, each line reports joints whose position changed more than
+``--threshold`` radians since the last sample:
+
+    [11:42:01] MOVING  LeftElbow(+0.152)  RightShoulderPitch(-0.081)
+    [11:42:02] still
+
+Use ``--raw`` for the full numeric table. ``--csv`` always logs raw values.
 
 Usage:
 
@@ -21,11 +27,18 @@ from g1_arms import ARM_JOINT_INDEX
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Read-only G1 arm joint position logger (rt/lowstate).")
+    p = argparse.ArgumentParser(description="Read-only G1 arm joint motion logger (rt/lowstate).")
     p.add_argument("--iface", default=None, help="Network interface on the robot's network (e.g. enp5s0).")
     p.add_argument("--fps", type=float, default=2.0, help="Print/log rate in Hz (default 2).")
     p.add_argument("--duration", type=float, default=0.0, help="Seconds to run (0 = until Ctrl+C).")
-    p.add_argument("--csv", default=None, help="Optional CSV output path.")
+    p.add_argument("--csv", default=None, help="Optional CSV output path (raw positions).")
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=0.01,
+        help="Radians of change since last sample to count as moving (default 0.01).",
+    )
+    p.add_argument("--raw", action="store_true", help="Print the full numeric table instead of motion summary.")
     return p.parse_args()
 
 
@@ -57,6 +70,7 @@ def main() -> None:
         sys.exit("No rt/lowstate within 10s — check --iface and robot network.")
 
     names = list(ARM_JOINT_INDEX)
+    short_names = [n.removeprefix("k") for n in names]
     writer = None
     csv_file = None
     if args.csv:
@@ -64,10 +78,11 @@ def main() -> None:
         writer = csv.writer(csv_file)
         writer.writerow(["t", *names])
 
-    header = " ".join(f"{n.removeprefix('k'):>18}" for n in names)
+    header = " ".join(f"{n:>18}" for n in short_names)
     dt = 1.0 / args.fps
     t0 = time.time()
     row_count = 0
+    prev_q: list[float] | None = None
     try:
         while True:
             if args.duration > 0 and time.time() - t0 >= args.duration:
@@ -75,9 +90,28 @@ def main() -> None:
             with lock:
                 msg = latest["msg"]
             q = [float(msg.motor_state[idx].q) for idx in ARM_JOINT_INDEX.values()]
-            if row_count % 20 == 0:
-                print(header)
-            print(" ".join(f"{v:>18.4f}" for v in q), flush=True)
+
+            if args.raw:
+                if row_count % 20 == 0:
+                    print(header)
+                print(" ".join(f"{v:>18.4f}" for v in q), flush=True)
+            else:
+                stamp = time.strftime("%H:%M:%S")
+                if prev_q is None:
+                    print(f"[{stamp}] baseline captured (threshold {args.threshold} rad)", flush=True)
+                else:
+                    moving = [
+                        (short_names[i], q[i] - prev_q[i])
+                        for i in range(len(q))
+                        if abs(q[i] - prev_q[i]) >= args.threshold
+                    ]
+                    if moving:
+                        detail = "  ".join(f"{n}({d:+.3f})" for n, d in moving)
+                        print(f"[{stamp}] MOVING  {detail}", flush=True)
+                    else:
+                        print(f"[{stamp}] still", flush=True)
+                prev_q = q
+
             if writer:
                 writer.writerow([round(time.time() - t0, 4), *[round(v, 6) for v in q]])
             row_count += 1
