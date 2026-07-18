@@ -37,6 +37,24 @@ ARM_JOINT_INDEX: dict[str, int] = {
 
 WEIGHT_JOINT = 29  # kNotUsedJoint: q = 1 enables arm_sdk, 0 releases it
 
+# Legs + waist (read-only here; never commanded). Used for diagnosis logging
+# to see the balance controller react (e.g. sidestepping).
+LEG_JOINT_INDEX: dict[str, int] = {
+    "kLeftHipPitch": 0,
+    "kLeftHipRoll": 1,
+    "kLeftHipYaw": 2,
+    "kLeftKnee": 3,
+    "kLeftAnklePitch": 4,
+    "kLeftAnkleRoll": 5,
+    "kRightHipPitch": 6,
+    "kRightHipRoll": 7,
+    "kRightHipYaw": 8,
+    "kRightKnee": 9,
+    "kRightAnklePitch": 10,
+    "kRightAnkleRoll": 11,
+    "kWaistYaw": 12,
+}
+
 
 class G1Arms:
     """Arms-only G1 interface over DDS (rt/lowstate in, rt/arm_sdk out)."""
@@ -100,6 +118,35 @@ class G1Arms:
             raise RuntimeError("No lowstate received yet")
         return {f"{name}.q": float(state.motor_state[idx].q) for name, idx in ARM_JOINT_INDEX.items()}
 
+    def get_full_snapshot(self) -> dict[str, float]:
+        """Everything useful from lowstate for diagnosis logging: arm q/dq/tau,
+        leg+waist q/dq/tau (to see the balance controller react), IMU rpy and
+        angular velocity, and mode_machine.
+        """
+        with self._lock:
+            state = self._low_state
+        if state is None:
+            raise RuntimeError("No lowstate received yet")
+        snap: dict[str, float] = {"mode_machine": float(state.mode_machine)}
+        for name, idx in ARM_JOINT_INDEX.items():
+            m = state.motor_state[idx]
+            snap[f"{name}.q"] = float(m.q)
+            snap[f"{name}.dq"] = float(m.dq)
+            snap[f"{name}.tau"] = float(m.tau_est)
+        for name, idx in LEG_JOINT_INDEX.items():
+            m = state.motor_state[idx]
+            snap[f"{name}.q"] = float(m.q)
+            snap[f"{name}.dq"] = float(m.dq)
+            snap[f"{name}.tau"] = float(m.tau_est)
+        imu = state.imu_state
+        snap["imu.roll"] = float(imu.rpy[0])
+        snap["imu.pitch"] = float(imu.rpy[1])
+        snap["imu.yaw"] = float(imu.rpy[2])
+        snap["imu.gyro_x"] = float(imu.gyroscope[0])
+        snap["imu.gyro_y"] = float(imu.gyroscope[1])
+        snap["imu.gyro_z"] = float(imu.gyroscope[2])
+        return snap
+
     def send_arm_positions(self, action: dict[str, float], weight: float = 1.0) -> None:
         """Publish arm joint targets. ``action`` keys are '<joint_name>.q'."""
         if self._publisher is None:
@@ -126,6 +173,19 @@ class G1Arms:
             self.send_arm_positions(current, weight=(i + 1) / steps)
             time.sleep(control_dt)
         logger.info("arm_sdk engaged (weight=1.0), holding current pose")
+
+    def freeze(self, hold: dict[str, float] | None = None) -> None:
+        """Hold a pose and stop: send one last command with weight 1 and leave
+        arm_sdk engaged. The controller keeps the last command, so the arms
+        stay stiff exactly where they are (no handback to the stock controller).
+        """
+        if self._publisher is None:
+            return
+        try:
+            self.send_arm_positions(hold or self.get_arm_positions(), weight=1.0)
+            logger.info("arms FROZEN (arm_sdk stays engaged at last pose)")
+        except Exception as e:
+            logger.warning("Failed to freeze arms: %s", e)
 
     def release(self, ramp_s: float = 1.0, control_dt: float = 0.02) -> None:
         """Ramp weight back to 0 so the stock controller regains the arms."""
