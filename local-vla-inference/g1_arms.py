@@ -53,19 +53,25 @@ class G1Arms:
         self._subscriber = None
         self._cmd = None
         self._crc = None
+        self._state_only = False
 
-    def connect(self) -> None:
-        """Requires ChannelFactoryInitialize() to have been called already."""
+    def connect(self, *, state_only: bool = False) -> None:
+        """Requires ChannelFactoryInitialize() to have been called already.
+
+        ``state_only=True`` only subscribes to ``rt/lowstate`` (no arm_sdk
+        publish) — use for diagnosis / joint logging.
+        """
         from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
         from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
         from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
         from unitree_sdk2py.utils.crc import CRC
 
-        self._cmd = unitree_hg_msg_dds__LowCmd_()
-        self._crc = CRC()
-
-        self._publisher = ChannelPublisher("rt/arm_sdk", LowCmd_)
-        self._publisher.Init()
+        self._state_only = state_only
+        if not state_only:
+            self._cmd = unitree_hg_msg_dds__LowCmd_()
+            self._crc = CRC()
+            self._publisher = ChannelPublisher("rt/arm_sdk", LowCmd_)
+            self._publisher.Init()
 
         self._subscriber = ChannelSubscriber("rt/lowstate", LowState_)
         self._subscriber.Init(self._on_low_state, 10)
@@ -76,7 +82,10 @@ class G1Arms:
                 "Check the DDS network interface (--iface) and that this machine "
                 "is on the robot's network (192.168.123.x)."
             )
-        logger.info("G1 arms connected (rt/lowstate OK, publishing rt/arm_sdk)")
+        if state_only:
+            logger.info("G1 state connected (rt/lowstate OK, no arm_sdk)")
+        else:
+            logger.info("G1 arms connected (rt/lowstate OK, publishing rt/arm_sdk)")
 
     def _on_low_state(self, msg) -> None:
         with self._lock:
@@ -93,6 +102,8 @@ class G1Arms:
 
     def send_arm_positions(self, action: dict[str, float], weight: float = 1.0) -> None:
         """Publish arm joint targets. ``action`` keys are '<joint_name>.q'."""
+        if self._publisher is None:
+            raise RuntimeError("arm_sdk publisher not available (connected state_only)")
         cmd = self._cmd
         cmd.motor_cmd[WEIGHT_JOINT].q = float(np.clip(weight, 0.0, 1.0))
         for name, idx in ARM_JOINT_INDEX.items():
@@ -131,6 +142,7 @@ class G1Arms:
             logger.warning("Failed to release arm_sdk cleanly: %s", e)
 
     def disconnect(self) -> None:
-        self.release()
+        if not self._state_only:
+            self.release()
         self._publisher = None
         self._subscriber = None

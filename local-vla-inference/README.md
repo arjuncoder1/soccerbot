@@ -32,3 +32,14 @@ export CYCLONEDDS_HOME=$HOME/cyclonedds/install
 ./local-vla-inference/run.sh --iface eth0
 ./local-vla-inference/run.sh --dry-run
 ```
+
+## Diagnosis (read-only, sends nothing to the robot)
+
+```bash
+# control state: motion-switcher mode, loco FSM (damp/stand), lowstate snapshot
+./local-vla-inference/run.sh diag_state.py --iface eth0
+
+# live arm joint positions; optional CSV logging
+./local-vla-inference/run.sh diag_joints.py --iface eth0
+./local-vla-inference/run.sh diag_joints.py --iface eth0 --csv joints.csv --fps 30
+```

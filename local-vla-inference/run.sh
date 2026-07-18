@@ -28,4 +28,11 @@ export CYCLONEDDS_HOME="$CYCLONE_PREFIX"
 export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PATH="$VENV_DIR/bin:$PATH"
 
-exec python "$PKG_DIR/main.py" "$@"
+# Optional first arg: another script in this package (e.g. diag_state.py).
+SCRIPT="main.py"
+if [[ $# -gt 0 && "$1" == *.py && -f "$PKG_DIR/$1" ]]; then
+  SCRIPT="$1"
+  shift
+fi
+
+exec python "$PKG_DIR/$SCRIPT" "$@"
