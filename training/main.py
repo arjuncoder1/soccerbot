@@ -13,15 +13,17 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import modal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEROBOT_ROOT = REPO_ROOT / "thirdparty" / "lerobot"
 
-REMOTE_DATA_ROOT = Path("/data")
-REMOTE_OUTPUT_ROOT = Path("/outputs")
+# Modal workers always run Linux, regardless of the local (submitting) OS, so
+# remote paths must stay POSIX even when this script runs on Windows.
+REMOTE_DATA_ROOT = PurePosixPath("/data")
+REMOTE_OUTPUT_ROOT = PurePosixPath("/outputs")
 
 DEFAULT_STEPS = 100_000
 DEFAULT_GPU = "A100"
