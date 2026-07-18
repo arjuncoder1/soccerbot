@@ -3,7 +3,7 @@ name = "scripted-behavior"
 version = "0.1.0"
 description = "Hardcoded (non-learned) post-pickup state machine: turn, human-detect, shuffle, throw"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 # unitree_sdk2py / cyclonedds 0.10.2 need Python 3.12 — install on the robot via
 # local-vla-inference/install.sh (or a dedicated 3.12 venv), not the root 3.13 sync.
 dependencies = []

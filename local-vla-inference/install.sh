@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Robot-machine install for local-vla-inference.
+# Build CycloneDDS, then uv sync the repo-root .venv with Python 3.12.
 #
-# unitree_sdk2py pins cyclonedds==0.10.2, which does NOT work on Python 3.13
-# (ImportError: undefined symbol: _Py_IsFinalizing). This script always uses
-# Python 3.12 in a dedicated venv under local-vla-inference/.venv.
+# unitree_sdk2py → cyclonedds==0.10.2 does not work on Python 3.13
+# (undefined symbol: _Py_IsFinalizing). Always sync root with -p 3.12.
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$PKG_DIR/.." && pwd)"
-VENV_DIR="${VENV_DIR:-$PKG_DIR/.venv}"
+VENV_DIR="${VENV_DIR:-$REPO_ROOT/.venv}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 
 CYCLONE_SRC="${CYCLONE_SRC:-$HOME/cyclonedds}"
@@ -62,17 +61,18 @@ export CMAKE_PREFIX_PATH="${CYCLONE_PREFIX}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_P
 export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo "CYCLONEDDS_HOME=$CYCLONEDDS_HOME"
-echo "Syncing local-vla-inference with Python ${PYTHON_VERSION} → $VENV_DIR"
-cd "$PKG_DIR"
+echo "Syncing workspace at $REPO_ROOT → $VENV_DIR (Python ${PYTHON_VERSION})"
+cd "$REPO_ROOT"
 uv python install "$PYTHON_VERSION"
-# Standalone project (not in the 3.13 workspace): creates/uses PKG_DIR/.venv
-UV_PROJECT_ENVIRONMENT="$VENV_DIR" uv sync -p "$PYTHON_VERSION" --project "$PKG_DIR"
+# Recreate root .venv on 3.12 so cyclonedds links against the right CPython.
+uv sync -p "$PYTHON_VERSION" --all-packages --reinstall-package cyclonedds
 
 echo
-echo "Done. On the robot:"
+echo "Done. Root venv: $VENV_DIR"
 echo "  source $VENV_DIR/bin/activate"
 echo "  export CYCLONEDDS_HOME=$CYCLONE_PREFIX"
 echo "  export LD_LIBRARY_PATH=$CYCLONE_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
-echo "  python $PKG_DIR/main.py --dry-run"
+echo "  ./local-vla-inference/run.sh --dry-run"
 echo
-echo "Do NOT use the repo-root .venv (Python 3.13) — cyclonedds 0.10.2 breaks there."
+echo "Always sync with: uv sync -p 3.12 --all-packages"
+echo "(Python 3.13 breaks unitree_sdk2py / cyclonedds.)"

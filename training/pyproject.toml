@@ -3,7 +3,7 @@ name = "training"
 version = "0.1.0"
 description = "Modal launcher for LeRobot policy training"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "modal>=1.5.2",
 ]
