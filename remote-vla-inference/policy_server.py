@@ -135,6 +135,30 @@ def _serve_forever(host: str, port: int, fps: int) -> None:
                 f"path={policy_specs.pretrained_name_or_path} | device={policy_specs.device}"
             )
 
+            # Cache: skip the ~200s rebuild if the same checkpoint is already
+            # loaded on the same device. Common case: user Ctrl+C's the client
+            # and reconnects -- no need to re-instantiate PaliGemma-3b + reload
+            # 7GB of safetensors when nothing about the policy changed.
+            cache_key = (
+                policy_specs.policy_type,
+                policy_specs.pretrained_name_or_path,
+                policy_specs.device,
+            )
+            if (
+                getattr(self, "_loaded_cache_key", None) == cache_key
+                and getattr(self, "policy", None) is not None
+            ):
+                self.logger.info(
+                    f"Reusing cached policy ({policy_specs.pretrained_name_or_path} "
+                    f"on {policy_specs.device}); skipping rebuild."
+                )
+                # Client-provided metadata may change even when the checkpoint
+                # doesn't; keep it in sync so feature routing / chunk sizing use
+                # the fresh values.
+                self.lerobot_features = policy_specs.lerobot_features
+                self.actions_per_chunk = policy_specs.actions_per_chunk
+                return services_pb2.Empty()
+
             self.device = policy_specs.device
             self.policy_type = policy_specs.policy_type
             self.lerobot_features = policy_specs.lerobot_features
@@ -178,6 +202,7 @@ def _serve_forever(host: str, port: int, fps: int) -> None:
                 f"Policy ready on {self.device} in {time.perf_counter() - start:.1f}s "
                 f"(tokenizer={PALIGEMMA_TOKENIZER})"
             )
+            self._loaded_cache_key = cache_key
             return services_pb2.Empty()
 
     policy_server = PiFriendlyPolicyServer(cfg)

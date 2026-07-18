@@ -52,7 +52,7 @@ def main():
     p.add_argument("--server_address", required=True)
     p.add_argument("--policy", default=DEFAULT_POLICY)
     p.add_argument("--policy_type", default="pi05")
-    p.add_argument("--task", default="move the blue box")
+    p.add_argument("--task", default="pick up the red ball")
     p.add_argument("--policy_device", default="cuda")
     p.add_argument("--actions_per_chunk", type=int, default=50)
     p.add_argument("--rounds", type=int, default=5)
