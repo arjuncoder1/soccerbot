@@ -8,8 +8,8 @@ A `uv` workspace with five members (see root `pyproject.toml`):
 - `soccerbot/` — currently an empty stub (`src/soccerbot/main.py` is empty); no settled purpose.
 - `training/` — Modal launcher for LeRobot policy training (`training/main.py`); depends on workspace `lerobot` + `modal`.
 - `thirdparty/lerobot/` — vendored Hugging Face LeRobot library; this is where essentially all real functionality lives. See `thirdparty/lerobot/AGENTS.md` for its architecture, lint/test/build commands, and per-module notes.
-- `local-vla-inference/` — stub (renamed from `vla-inference/`); will run the fine-tuned GR00T policy on the real G1 for the pickup phase. Depends on workspace `lerobot` + `unitree_sdk2py`. Has an `install.sh` that builds CycloneDDS locally (required by `unitree_sdk2py`) before `uv sync`.
-- `scripted-behavior/` — stub; hardcoded (non-learned) post-pickup FSM (turn, human-detect, shuffle, throw). Deliberately kept separate from `local-vla-inference/`. Depends on `unitree_sdk2py`.
+- `local-vla-inference/` — ACT inference on the real G1 (arms only). **Not a workspace member**: `unitree_sdk2py` → `cyclonedds==0.10.2` breaks on Python 3.13 (`_Py_IsFinalizing`). Use `local-vla-inference/install.sh` (Python 3.12 venv + CycloneDDS build).
+- `scripted-behavior/` — stub; hardcoded (non-learned) post-pickup FSM (turn, human-detect, shuffle, throw). Deliberately kept separate from `local-vla-inference/`.
 
 ## Cursor Cloud specific instructions
 
@@ -34,7 +34,7 @@ A `uv` workspace with five members (see root `pyproject.toml`):
 - Current G1 embodiment is arms-only 14-D (left/right arm × 7 joints; no hands, waist, or legs) in `training/embodiment_g1.py` with embodiment tag `new_embodiment`.
 - Groot fine-tune strategy: freeze the VLM backbone; train DiT action head + projector; no LoRA.
 - `training` depends on the local workspace package `lerobot` from `thirdparty/lerobot` (`lerobot = { workspace = true }`); sync from the repo root.
-- Root is a `uv` workspace (`training`, `thirdparty/lerobot`, `soccerbot`, `local-vla-inference`, `scripted-behavior`) with an empty root package and a shared `.venv` at the repo root.
+- Root is a `uv` workspace (`training`, `thirdparty/lerobot`, `soccerbot`, `scripted-behavior`, `remote-vla-inference`) with a shared Python 3.13 `.venv` at the repo root. Robot DDS code lives in a separate Python 3.12 venv under `local-vla-inference/.venv`.
 - No grasping is learned: the G1 has BrainCo Revo 2 hands, but they are not part of the 14-D action space; the ball is picked up via arm positioning with the hand held in a fixed pose.
 - Camera is a single RGB-D unit doing double duty: RGB feeds GR00T during pickup, depth feeds the post-pickup human-detection FSM.
 - Post-pickup behavior (turn 180°, depth-based human detection, shuffle, 6s-timeout hardcoded throw) belongs in `scripted-behavior/`, not `local-vla-inference/` — no model dependency by design.

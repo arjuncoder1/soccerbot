@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Install local-vla-inference deps, including unitree_sdk2py → cyclonedds.
-# cyclonedds 0.10.2 must build against a local CycloneDDS C install.
+# Robot-machine install for local-vla-inference.
+#
+# unitree_sdk2py pins cyclonedds==0.10.2, which does NOT work on Python 3.13
+# (ImportError: undefined symbol: _Py_IsFinalizing). This script always uses
+# Python 3.12 in a dedicated venv under local-vla-inference/.venv.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$PKG_DIR/.." && pwd)"
+VENV_DIR="${VENV_DIR:-$PKG_DIR/.venv}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+
 CYCLONE_SRC="${CYCLONE_SRC:-$HOME/cyclonedds}"
 CYCLONE_PREFIX="${CYCLONE_PREFIX:-$CYCLONE_SRC/install}"
 CYCLONE_BRANCH="${CYCLONE_BRANCH:-releases/0.10.x}"
@@ -52,12 +59,20 @@ fi
 
 export CYCLONEDDS_HOME="$CYCLONE_PREFIX"
 export CMAKE_PREFIX_PATH="${CYCLONE_PREFIX}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo "CYCLONEDDS_HOME=$CYCLONEDDS_HOME"
-echo "Syncing workspace from $REPO_ROOT (python 3.13) ..."
-cd "$REPO_ROOT"
-uv sync -p 3.13 --all-packages
+echo "Syncing local-vla-inference with Python ${PYTHON_VERSION} → $VENV_DIR"
+cd "$PKG_DIR"
+uv python install "$PYTHON_VERSION"
+# Standalone project (not in the 3.13 workspace): creates/uses PKG_DIR/.venv
+UV_PROJECT_ENVIRONMENT="$VENV_DIR" uv sync -p "$PYTHON_VERSION" --project "$PKG_DIR"
 
-echo "Done. Activate with: source $REPO_ROOT/.venv/bin/activate"
-echo "Keep CYCLONEDDS_HOME set when importing unitree_sdk2py:"
+echo
+echo "Done. On the robot:"
+echo "  source $VENV_DIR/bin/activate"
 echo "  export CYCLONEDDS_HOME=$CYCLONE_PREFIX"
+echo "  export LD_LIBRARY_PATH=$CYCLONE_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
+echo "  python $PKG_DIR/main.py --dry-run"
+echo
+echo "Do NOT use the repo-root .venv (Python 3.13) — cyclonedds 0.10.2 breaks there."

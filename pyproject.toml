@@ -10,10 +10,12 @@ members = [
     "training",
     "thirdparty/lerobot",
     "soccerbot",
-    "local-vla-inference",
     "scripted-behavior",
-    "remote-vla-inference"
+    "remote-vla-inference",
 ]
+# local-vla-inference is NOT a workspace member: unitree_sdk2py → cyclonedds 0.10.2
+# is incompatible with Python 3.13. Install it with local-vla-inference/install.sh
+# (dedicated Python 3.12 venv).
 
 [tool.uv]
 package = false

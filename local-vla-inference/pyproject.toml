@@ -1,9 +1,11 @@
 [project]
 name = "local-vla-inference"
 version = "0.1.0"
-description = "Add your description here"
+description = "ACT inference on Unitree G1D (arms only)"
 readme = "README.md"
-requires-python = ">=3.13"
+# cyclonedds 0.10.2 (via unitree_sdk2py) is incompatible with Python 3.13+
+# (_Py_IsFinalizing undefined). Use 3.12 on the robot machine via install.sh.
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "lerobot",
     "pyzmq>=26.0.0",
@@ -11,4 +13,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-lerobot = { workspace = true }
+lerobot = { path = "../thirdparty/lerobot", editable = true }
