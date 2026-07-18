@@ -2,7 +2,7 @@
 
 Examples:
     modal run training/main.py --dataset ./my_dataset --gpu H200 --policy act --steps 50000
-    modal run training/main.py --dataset user/my_dataset --gpu a100 --policy groot --steps 20000
+    modal run training/main.py --dataset ./g1_demos --gpu B200 --policy groot --steps 5000
     python training/main.py --dataset user/my_dataset --gpu B200 --policy molmoact2 --steps 10000 --lr 1e-5
 """
 
@@ -16,6 +16,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 import modal
+
+from embodiment_g1_revo2 import (
+    BASE_MODEL_PATH,
+    EMBODIMENT_TAG,
+    validate_dataset_layout,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEROBOT_ROOT = REPO_ROOT / "thirdparty" / "lerobot"
@@ -250,7 +256,25 @@ def build_lerobot_args(req: TrainRequest) -> list[str]:
     if req.log_freq is not None:
         args.append(f"--log_freq={req.log_freq}")
 
-    if req.policy == "molmoact2":
+    if req.policy == "groot":
+        # G1 + Revo 2: freeze VLM, train DiT action head + projector, no LoRA.
+        args.extend(
+            [
+                f"--policy.base_model_path={BASE_MODEL_PATH}",
+                f"--policy.embodiment_tag={EMBODIMENT_TAG}",
+                "--policy.tune_llm=false",
+                "--policy.tune_visual=false",
+                "--policy.tune_top_llm_layers=0",
+                "--policy.tune_projector=true",
+                "--policy.tune_diffusion_model=true",
+                "--policy.tune_vlln=true",
+                "--policy.use_bf16=true",
+                "--policy.use_relative_actions=true",
+                # Keep Revo hand joints absolute; arms stay relative.
+                '--policy.relative_exclude_joints=["hand"]',
+            ]
+        )
+    elif req.policy == "molmoact2":
         # Default finetune mode is LoRA on the VLM; --onlyactionexpertft switches
         # to freezing everything except the action expert (requires continuous mode).
         if req.only_action_expert_ft:
@@ -363,9 +387,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         default=False,
         help=(
-            "MolmoAct2 only: finetune the action expert only "
-            "(sets train_action_expert_only + action_mode=continuous, disables LoRA). "
-            "Default molmoact2 mode keeps enable_lora_vlm=true."
+            "MolmoAct2: freeze VLM / train action expert only (disables LoRA). "
+            "Groot already uses action-expert-only by default; flag is accepted as a no-op."
         ),
     )
     parser.add_argument(
@@ -389,8 +412,11 @@ def request_from_args(args: argparse.Namespace) -> TrainRequest:
     push_to_hub = bool(args.push_to_hub or args.policy_repo_id)
     if args.push_to_hub and not args.policy_repo_id:
         raise ValueError("--push-to-hub requires --policy-repo-id.")
-    if args.only_action_expert_ft and args.policy != "molmoact2":
-        raise ValueError("--onlyactionexpertft is only supported with --policy molmoact2.")
+    if args.only_action_expert_ft and args.policy not in {"molmoact2", "groot"}:
+        raise ValueError("--onlyactionexpertft is only supported with --policy molmoact2 or groot.")
+
+    if args.policy == "groot" and dataset.is_local and dataset.local_path is not None:
+        validate_dataset_layout(dataset.local_path)
 
     return TrainRequest(
         dataset=dataset,
@@ -478,6 +504,11 @@ def submit_training(req: TrainRequest) -> int:
     cli_args = build_lerobot_args(req)
     print(f"Submitting Modal training run on gpu={req.gpu}")
     print(f"Policy={req.policy} steps={req.steps} dataset={req.dataset.repo_id}")
+    if req.policy == "groot":
+        print(
+            f"Groot: {BASE_MODEL_PATH} embodiment={EMBODIMENT_TAG} "
+            "(backbone frozen, DiT+projector trainable, no LoRA, 26-D G1+Revo2)"
+        )
     if req.lr is None:
         print("Learning rate: policy default preset")
     else:

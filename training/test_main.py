@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from embodiment_g1_revo2 import STATE_ACTION_DIM, STATE_ACTION_NAMES
 from main import (
     TrainRequest,
     build_lerobot_args,
@@ -109,6 +110,25 @@ def test_build_lerobot_args_optional_overrides(tmp_path: Path) -> None:
     assert "--policy.repo_id=user/groot-run" in args
     assert "--policy.push_to_hub=true" in args
     assert "--wandb.enable=true" in args
+    assert "--policy.type=groot" in args
+    assert "--policy.base_model_path=nvidia/GR00T-N1.7-3B" in args
+    assert "--policy.embodiment_tag=new_embodiment" in args
+    assert "--policy.tune_llm=false" in args
+    assert "--policy.tune_visual=false" in args
+    assert "--policy.tune_projector=true" in args
+    assert "--policy.tune_diffusion_model=true" in args
+    assert "--policy.use_relative_actions=true" in args
+    assert '--policy.relative_exclude_joints=["hand"]' in args
+
+
+def test_state_action_layout_is_26() -> None:
+    assert len(STATE_ACTION_NAMES) == STATE_ACTION_DIM == 26
+    assert STATE_ACTION_NAMES[0] == "left_arm_shoulder_pitch"
+    assert STATE_ACTION_NAMES[7] == "right_arm_shoulder_pitch"
+    assert STATE_ACTION_NAMES[14] == "left_hand_thumb_flex"
+    assert STATE_ACTION_NAMES[15] == "left_hand_thumb_aux"
+    assert STATE_ACTION_NAMES[20] == "right_hand_thumb_flex"
+    assert STATE_ACTION_NAMES[-1] == "right_hand_pinky"
 
 
 def test_parse_args_and_request(tmp_path: Path) -> None:
@@ -171,9 +191,42 @@ def test_molmoact2_onlyactionexpertft() -> None:
     assert "--policy.action_mode=continuous" in lerobot_args
 
 
-def test_onlyactionexpertft_requires_molmoact2() -> None:
+def test_onlyactionexpertft_requires_molmoact2_or_groot() -> None:
     args = parse_args(
         ["--dataset", "user/ds", "--policy", "act", "--onlyactionexpertft"]
     )
-    with pytest.raises(ValueError, match="molmoact2"):
+    with pytest.raises(ValueError, match="molmoact2 or groot"):
+        request_from_args(args)
+
+
+def test_groot_onlyactionexpertft_accepted() -> None:
+    args = parse_args(
+        [
+            "--dataset",
+            "user/ds",
+            "--policy",
+            "groot",
+            "--steps",
+            "1000",
+            "--onlyactionexpertft",
+        ]
+    )
+    req = request_from_args(args)
+    assert req.policy == "groot"
+    assert req.only_action_expert_ft is True
+    lerobot_args = build_lerobot_args(req)
+    assert "--policy.tune_llm=false" in lerobot_args
+
+
+def test_groot_rejects_mismatched_local_dataset(tmp_path: Path) -> None:
+    ds = tmp_path / "bad_ds"
+    (ds / "meta").mkdir(parents=True)
+    (ds / "meta" / "info.json").write_text(
+        '{"features": {"observation.state": {"shape": [6], "names": ["a"]}, '
+        '"action": {"shape": [6], "names": ["a"]}}}'
+    )
+    args = parse_args(
+        ["--dataset", str(ds), "--policy", "groot", "--steps", "100"]
+    )
+    with pytest.raises(ValueError, match="G1\\+Revo2"):
         request_from_args(args)
