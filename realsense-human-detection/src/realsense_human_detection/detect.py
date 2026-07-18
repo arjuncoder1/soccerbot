@@ -94,15 +94,12 @@ class HumanDetector:
         if color_bgr.ndim != 3 or color_bgr.shape[2] != 3:
             raise ValueError(f"color_bgr must be HxWx3, got {color_bgr.shape}")
 
-        predict_kwargs: dict[str, Any] = {
-            "device": self.device,
-            "verbose": False,
-        }
-        # Newer ultralytics prefer quantize=; older used half=.
-        try:
-            results = self._model(color_bgr, quantize=self.use_half, **predict_kwargs)[0]
-        except TypeError:
-            results = self._model(color_bgr, half=self.use_half, **predict_kwargs)[0]
+        results = self._model(
+            color_bgr,
+            device=self.device,
+            half=self.use_half,
+            verbose=False,
+        )[0]
 
         people: list[PersonDetection] = []
         boxes = getattr(results, "boxes", None)
