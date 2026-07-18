@@ -7,13 +7,13 @@ ignore the last 2 dims.
 Everything runs on this machine:
   - state:   subscribe ``rt/lowstate`` (DDS)
   - arms:    publish ``rt/arm_sdk`` (DDS, weight joint 29)
-  - camera:  Unitree teleop ``image_server`` already running on the robot
-             (``--camera zmq://HOST:PORT``), or a local camera (``opencv:N``)
+  - camera:  Unitree ``teleimager`` already running on the robot
+             (``--camera teleimager://192.168.123.164``, head cam on :55555)
 
 Usage:
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
-    ./local-vla-inference/run.sh --iface eth0 --camera zmq://192.168.123.164:5555
+    ./local-vla-inference/run.sh --iface eth0
 """
 
 from __future__ import annotations
@@ -54,9 +54,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--camera",
-        default="zmq://192.168.123.164:5555",
-        help="Front camera source: 'zmq://HOST:PORT' (Unitree image_server already on the robot) "
-        "or 'opencv:N' (camera attached to this machine).",
+        default="teleimager://192.168.123.164",
+        help="Front camera source: 'teleimager://HOST' (Unitree teleimager on the robot; "
+        "auto-detects head-cam port/binocular via :60000), 'zmq://HOST:PORT', "
+        "or 'opencv:N' (camera on this machine).",
     )
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
     p.add_argument("--duration", type=float, default=60.0, help="Seconds to run (0 = forever).")
