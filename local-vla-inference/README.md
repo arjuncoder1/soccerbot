@@ -17,7 +17,13 @@ Uses the **repo-root** `.venv`. Sync with **Python 3.12** — `cyclonedds==0.10.
 
 ## Run
 
+Uses the **Unitree front camera only** (OpenCV). That frame is copied into all
+4 image inputs the ACT checkpoint expects.
+
 ```bash
 ./local-vla-inference/run.sh --dry-run
-./local-vla-inference/run.sh --robot-ip 192.168.123.164
+
+# front cam is often /dev/video0 or /dev/video4 on G1
+./local-vla-inference/run.sh --front-camera 0
+./local-vla-inference/run.sh --front-camera 4
 ```

@@ -3,11 +3,13 @@
 Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D). We command the
 14 arm joints and zero-pad / ignore the last 2 dims.
 
+Hardware: **one Unitree front camera** — that frame is copied into all 4
+policy image inputs (``cam_*``) the checkpoint was trained with.
+
 Example (on the robot machine, after ``./install.sh``):
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
-    uv run --package local-vla-inference python local-vla-inference/main.py \\
-        --robot-ip 192.168.123.164
+    ./local-vla-inference/run.sh --front-camera 0
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import torch
 
 from embodiment_g1d_16d import (
@@ -30,12 +33,17 @@ from embodiment_g1d_16d import (
 
 logger = logging.getLogger(__name__)
 
+# Robot observation key for the single physical front camera.
+FRONT_CAMERA_KEY = "front"
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="ACT inference for G1D arms-only (16-D policy, no hands).")
+    p = argparse.ArgumentParser(
+        description="ACT inference for G1D arms-only — Unitree front camera only."
+    )
     p.add_argument("--policy", default=DEFAULT_POLICY_ID, help="Hub repo id or local checkpoint path.")
     p.add_argument("--device", default=None, help="cuda / cpu / mps (default: cuda if available).")
-    p.add_argument("--robot-ip", default="192.168.123.164", help="G1 DDS / camera host IP.")
+    p.add_argument("--robot-ip", default="192.168.123.164", help="G1 robot IP (DDS bridge).")
     p.add_argument("--fps", type=float, default=30.0, help="Control loop rate.")
     p.add_argument("--duration", type=float, default=60.0, help="Seconds to run (0 = forever).")
     p.add_argument(
@@ -45,10 +53,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Use LeRobot UnitreeG1 simulation mode.",
     )
     p.add_argument(
-        "--camera-port",
-        type=int,
-        default=5555,
-        help="ZMQ image server port on the robot (shared by all cameras).",
+        "--front-camera",
+        default="0",
+        help="OpenCV index or path for the Unitree front cam (default: 0). "
+        "Common G1 values: 0 or 4.",
     )
     p.add_argument(
         "--dry-run",
@@ -68,21 +76,37 @@ def resolve_device(name: str | None) -> torch.device:
     return torch.device("cpu")
 
 
+def _parse_camera_index(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+def resize_front_frame(frame: np.ndarray) -> np.ndarray:
+    """Ensure HWC uint8 RGB at policy resolution."""
+    import cv2
+
+    h, w, _ = IMAGE_SHAPE
+    if frame.shape[0] != h or frame.shape[1] != w:
+        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_LINEAR)
+    if frame.dtype != np.uint8:
+        frame = frame.astype(np.uint8)
+    return frame
+
+
 def build_robot(args: argparse.Namespace):
-    from lerobot.cameras.zmq import ZMQCameraConfig
+    from lerobot.cameras.opencv import OpenCVCameraConfig
     from lerobot.robots.unitree_g1 import UnitreeG1, UnitreeG1Config
 
     h, w, _ = IMAGE_SHAPE
     cameras = {
-        cam: ZMQCameraConfig(
-            server_address=args.robot_ip,
-            port=args.camera_port,
-            camera_name=cam,
+        FRONT_CAMERA_KEY: OpenCVCameraConfig(
+            index_or_path=_parse_camera_index(args.front_camera),
             width=w,
             height=h,
             fps=int(args.fps),
         )
-        for cam in CAMERA_KEYS
     }
     cfg = UnitreeG1Config(
         id="g1d_act",
@@ -96,7 +120,7 @@ def build_robot(args: argparse.Namespace):
 
 
 def pack_observation(robot_obs: dict[str, Any]) -> dict[str, Any]:
-    """Map UnitreeG1 arm + camera obs; pad unused dims with 0 (no hands)."""
+    """Map arms + front cam; replicate front frame into all policy image keys."""
     out: dict[str, Any] = {}
     for joint in ARM_JOINTS:
         key = f"{joint}.q"
@@ -105,10 +129,15 @@ def pack_observation(robot_obs: dict[str, Any]) -> dict[str, Any]:
         out[key] = float(robot_obs[key])
     for pad in UNUSED_PAD:
         out[pad] = 0.0
+
+    if FRONT_CAMERA_KEY not in robot_obs:
+        raise KeyError(
+            f"Missing front camera frame ({FRONT_CAMERA_KEY}). "
+            "Try --front-camera 4 (Unitree often uses /dev/video4)."
+        )
+    front = resize_front_frame(np.asarray(robot_obs[FRONT_CAMERA_KEY]))
     for cam in CAMERA_KEYS:
-        if cam not in robot_obs:
-            raise KeyError(f"Missing camera frame: {cam}")
-        out[cam] = robot_obs[cam]
+        out[cam] = front
     return out
 
 
@@ -118,16 +147,15 @@ def send_arm_action(robot, action: dict[str, float]) -> None:
 
 
 def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
-    import numpy as np
-
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
     features = dataset_features()
     fake_obs = {f"{j}.q": 0.0 for j in ARM_JOINTS}
     for pad in UNUSED_PAD:
         fake_obs[pad] = 0.0
+    blank = np.zeros(IMAGE_SHAPE, dtype=np.uint8)
     for cam in CAMERA_KEYS:
-        fake_obs[cam] = np.zeros(IMAGE_SHAPE, dtype=np.uint8)
+        fake_obs[cam] = blank
 
     frame = build_inference_frame(observation=fake_obs, ds_features=features, device=device)
     batch = preprocess(frame)
@@ -135,7 +163,7 @@ def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
     action = postprocess(action)
     robot_action = make_robot_action(action, features)
     arm_keys = [f"{j}.q" for j in ARM_JOINTS]
-    logger.info("Dry-run OK. Arm action dims=%d (hands ignored)", len(arm_keys))
+    logger.info("Dry-run OK. Arm action dims=%d; front cam replicated to %s", len(arm_keys), CAMERA_KEYS)
     logger.info("Sample arm action: %s", {k: round(robot_action[k], 4) for k in arm_keys[:4]})
 
 
@@ -145,7 +173,7 @@ def run(args: argparse.Namespace) -> None:
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
     device = resolve_device(args.device)
-    logger.info("Loading ACT policy %s on %s (arms only)", args.policy, device)
+    logger.info("Loading ACT policy %s on %s (arms only, front cam only)", args.policy, device)
 
     policy = ACTPolicy.from_pretrained(args.policy)
     policy.to(device)
@@ -162,12 +190,24 @@ def run(args: argparse.Namespace) -> None:
         return
 
     robot = build_robot(args)
-    robot.connect()
+    try:
+        robot.connect()
+    except Exception:
+        logger.exception(
+            "Robot/camera connect failed. Front cam device=%r — try --front-camera 4",
+            args.front_camera,
+        )
+        raise
 
     dt = 1.0 / args.fps
     t0 = time.time()
     step = 0
-    logger.info("Starting ACT arm control loop at %.1f Hz (Ctrl+C to stop)", args.fps)
+    logger.info(
+        "ACT loop @ %.1f Hz | front OpenCV device=%s → policy cams %s",
+        args.fps,
+        args.front_camera,
+        CAMERA_KEYS,
+    )
 
     try:
         while True:
