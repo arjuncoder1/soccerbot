@@ -29,6 +29,7 @@ resolution-markers = [
 members = [
     "lerobot",
     "soccerbot",
+    "soccerbot-workspace",
     "training",
 ]
 
@@ -5934,6 +5935,11 @@ wheels = [
 
 [[package]]
 name = "soccerbot"
+version = "0.1.0"
+source = { virtual = "soccerbot" }
+
+[[package]]
+name = "soccerbot-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 
