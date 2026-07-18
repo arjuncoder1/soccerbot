@@ -11,6 +11,7 @@ members = [
     "thirdparty/lerobot",
     "soccerbot",
     "local-vla-inference",
+    "scripted-behavior",
 ]
 
 [tool.uv]

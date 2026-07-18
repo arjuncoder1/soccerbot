@@ -1,0 +1,9 @@
+[project]
+name = "scripted-behavior"
+version = "0.1.0"
+description = "Hardcoded (non-learned) post-pickup state machine: turn, human-detect, shuffle, throw"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
+]
