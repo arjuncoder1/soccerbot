@@ -28,10 +28,10 @@ resolution-markers = [
 [manifest]
 members = [
     "lerobot",
+    "local-vla-inference",
     "soccerbot",
     "soccerbot-workspace",
     "training",
-    "vla-inference",
 ]
 
 [[package]]
@@ -3432,6 +3432,21 @@ wheels = [
 ]
 
 [[package]]
+name = "local-vla-inference"
+version = "0.1.0"
+source = { virtual = "local-vla-inference" }
+dependencies = [
+    { name = "lerobot" },
+    { name = "unitree-sdk2py" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lerobot", editable = "thirdparty/lerobot" },
+    { name = "unitree-sdk2py", git = "https://github.com/unitreerobotics/unitree_sdk2_python.git" },
+]
+
+[[package]]
 name = "lxml"
 version = "6.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -6643,21 +6658,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/d9/b477fddb68840b570af8b22afe9b035cbc277b5fb7b33dea390617a8b10f/virtualenv-21.6.1.tar.gz", hash = "sha256:15f978b7cd329f24855ff4a0c4b4899cc7678589f49adbdcbbb4d3232e641128", size = 5526620, upload-time = "2026-07-10T19:33:53.312Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/7c/4e7225d46d634a0d8d534dd8a6ce0c319d09b4d0cf0337eb314ca4789d8c/virtualenv-21.6.1-py3-none-any.whl", hash = "sha256:afe991df855715a2b2f60edfcc0107ef95a79fdfd8cb4cdaa71603d1c12e463b", size = 5506392, upload-time = "2026-07-10T19:33:51.629Z" },
-]
-
-[[package]]
-name = "vla-inference"
-version = "0.1.0"
-source = { virtual = "vla-inference" }
-dependencies = [
-    { name = "lerobot" },
-    { name = "unitree-sdk2py" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "lerobot", editable = "thirdparty/lerobot" },
-    { name = "unitree-sdk2py", git = "https://github.com/unitreerobotics/unitree_sdk2_python.git" },
 ]
 
 [[package]]
