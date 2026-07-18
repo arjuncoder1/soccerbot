@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Build CycloneDDS, then uv sync the repo-root .venv with Python 3.12.
-#
-# unitree_sdk2py → cyclonedds==0.10.2 does not work on Python 3.13
-# (undefined symbol: _Py_IsFinalizing). Always sync root with -p 3.12.
+# Robot install: CycloneDDS + root .venv on Python 3.12 (required for unitree_sdk2py).
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,81 +11,112 @@ CYCLONE_SRC="${CYCLONE_SRC:-$HOME/cyclonedds}"
 CYCLONE_PREFIX="${CYCLONE_PREFIX:-$CYCLONE_SRC/install}"
 CYCLONE_BRANCH="${CYCLONE_BRANCH:-releases/0.10.x}"
 
-need_cmd() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "error: missing required command: $1" >&2
-    exit 1
-  }
-}
+log() { echo "==> $*"; }
+die() { echo "error: $*" >&2; exit 1; }
 
-ensure_apt_deps() {
-  command -v apt-get >/dev/null 2>&1 || return 0
-  echo "Installing apt deps: cmake, build-essential, python${PYTHON_VERSION}-dev ..."
+need_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
+
+install_apt_deps() {
+  need_cmd apt-get
+  need_cmd sudo
+  log "Installing apt packages (cmake, gcc, python${PYTHON_VERSION}-dev)..."
   sudo apt-get update -y
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     cmake \
     build-essential \
     git \
     pkg-config \
+    "python${PYTHON_VERSION}" \
     "python${PYTHON_VERSION}-dev" \
     "python${PYTHON_VERSION}-venv"
 }
 
-export_python_build_env() {
+find_python_h() {
   local py="$1"
   local include
   include="$("$py" -c 'import sysconfig; print(sysconfig.get_path("include"))')"
-  if [[ ! -f "$include/Python.h" ]]; then
-    echo "error: Python.h not found under $include" >&2
-    echo "hint: sudo apt install python${PYTHON_VERSION}-dev" >&2
-    exit 1
+  if [[ -f "$include/Python.h" ]]; then
+    echo "$include"
+    return
   fi
-  export CPATH="${include}${CPATH:+:$CPATH}"
-  export C_INCLUDE_PATH="${include}${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
-  export CPPFLAGS="-I${include} ${CPPFLAGS:-}"
-  echo "Using Python headers: $include/Python.h"
+  # Common Debian/Ubuntu locations
+  for cand in \
+    "/usr/include/python${PYTHON_VERSION}" \
+    "/usr/include/python${PYTHON_VERSION}m" \
+    "/usr/local/include/python${PYTHON_VERSION}"
+  do
+    if [[ -f "$cand/Python.h" ]]; then
+      echo "$cand"
+      return
+    fi
+  done
+  die "Python.h not found (tried $include). Is python${PYTHON_VERSION}-dev installed?"
 }
 
-need_cmd uv
-ensure_apt_deps
-need_cmd git
-need_cmd cmake
-need_cmd g++
-
-if [[ ! -f "$CYCLONE_PREFIX/lib/libddsc.so" && ! -f "$CYCLONE_PREFIX/lib/libddsc.dylib" ]]; then
-  echo "Building CycloneDDS ($CYCLONE_BRANCH) → $CYCLONE_PREFIX"
+build_cyclonedds_c() {
+  if [[ -f "$CYCLONE_PREFIX/lib/libddsc.so" || -f "$CYCLONE_PREFIX/lib/libddsc.dylib" ]]; then
+    log "CycloneDDS C lib already at $CYCLONE_PREFIX"
+    return
+  fi
+  log "Building CycloneDDS C library → $CYCLONE_PREFIX"
   if [[ ! -d "$CYCLONE_SRC/.git" ]]; then
     git clone --depth 1 -b "$CYCLONE_BRANCH" \
       https://github.com/eclipse-cyclonedds/cyclonedds.git "$CYCLONE_SRC"
   fi
   cmake -S "$CYCLONE_SRC" -B "$CYCLONE_SRC/build" \
     -DCMAKE_INSTALL_PREFIX="$CYCLONE_PREFIX"
-  cmake --build "$CYCLONE_SRC/build" --target install
-else
-  echo "Using existing CycloneDDS at $CYCLONE_PREFIX"
-fi
+  cmake --build "$CYCLONE_SRC/build" --target install -j"$(nproc 2>/dev/null || echo 2)"
+}
+
+need_cmd uv
+install_apt_deps
+need_cmd git
+need_cmd cmake
+need_cmd g++
+need_cmd "python${PYTHON_VERSION}"
+
+PYTHON_BIN="$(command -v "python${PYTHON_VERSION}")"
+INCLUDE_DIR="$(find_python_h "$PYTHON_BIN")"
+log "Python: $PYTHON_BIN"
+log "Python.h: $INCLUDE_DIR/Python.h"
+
+build_cyclonedds_c
 
 export CYCLONEDDS_HOME="$CYCLONE_PREFIX"
 export CMAKE_PREFIX_PATH="${CYCLONE_PREFIX}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export CPATH="${INCLUDE_DIR}${CPATH:+:$CPATH}"
+export C_INCLUDE_PATH="${INCLUDE_DIR}${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
+export CFLAGS="-I${INCLUDE_DIR} ${CFLAGS:-}"
+export CPPFLAGS="-I${INCLUDE_DIR} ${CPPFLAGS:-}"
+export CXXFLAGS="-I${INCLUDE_DIR} ${CXXFLAGS:-}"
 
-echo "CYCLONEDDS_HOME=$CYCLONEDDS_HOME"
-echo "Syncing workspace at $REPO_ROOT → $VENV_DIR (Python ${PYTHON_VERSION})"
+log "CYCLONEDDS_HOME=$CYCLONEDDS_HOME"
+log "Creating root venv with system Python ${PYTHON_VERSION}"
 cd "$REPO_ROOT"
+rm -rf "$VENV_DIR"
+uv venv "$VENV_DIR" -p "$PYTHON_BIN"
 
-# Prefer system 3.12 (matches python3.12-dev headers). Else uv-managed.
-if command -v "python${PYTHON_VERSION}" >/dev/null 2>&1; then
-  PYTHON_BIN="$(command -v "python${PYTHON_VERSION}")"
-else
-  uv python install "$PYTHON_VERSION"
-  PYTHON_BIN="$(uv python find "$PYTHON_VERSION")"
-fi
-export_python_build_env "$PYTHON_BIN"
+log "Building/installing cyclonedds==0.10.2 into venv first"
+# Force a non-isolated build so CPATH/CFLAGS reach the extension compile.
+UV_NO_BUILD_ISOLATION=1 \
+  uv pip install \
+    --python "$VENV_DIR/bin/python" \
+    --no-binary cyclonedds \
+    "cyclonedds==0.10.2"
 
-uv sync -p "$PYTHON_BIN" --all-packages --reinstall-package cyclonedds
+log "Syncing full workspace into $VENV_DIR"
+uv sync -p "$VENV_DIR/bin/python" --all-packages
+
+log "Verifying imports"
+"$VENV_DIR/bin/python" - <<'PY'
+import cyclonedds
+import unitree_sdk2py
+print("ok:", cyclonedds.__file__)
+PY
 
 echo
-echo "Done. Root venv: $VENV_DIR"
+echo "Done."
 echo "  source $VENV_DIR/bin/activate"
 echo "  export CYCLONEDDS_HOME=$CYCLONE_PREFIX"
 echo "  export LD_LIBRARY_PATH=$CYCLONE_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
