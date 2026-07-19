@@ -1,27 +1,26 @@
-"""Stage 1: run the learned VLA pickup policy in a subprocess.
+"""Stage 1: run the learned ACT pickup policy in-process (or replay a trajectory).
 
-Delegates to ``local-vla-inference/run.sh`` or
-``remote-vla-inference/run_client.sh`` so we don't drag torch / lerobot
-into the orchestrator process. Ctrl+C in the orchestrator propagates
-to the child.
+Delegates to ``local-vla-inference`` via import (no subprocess) so slew
+clamping, Ctrl+C graceful reset, and Rerun telemetry stay in one process.
 
-A third backend, ``replay``, streams the pre-recorded arm-qpos
-trajectory at ``trajectories/pickup_ep148_prod2.json`` directly over
-``rt/arm_sdk`` -- no learned policy, no camera, no torch.
+A third backend, ``replay``, streams a pre-recorded arm-qpos trajectory from
+``trajectories/`` over ``rt/arm_sdk``.
 """
 
 from __future__ import annotations
 
 import logging
-import subprocess
+import sys
 
 from config import REPO_ROOT, OrchestratorConfig, PickupBackend
 
 logger = logging.getLogger("scripted_behavior.pickup")
 
-LOCAL_VLA_RUN = REPO_ROOT / "local-vla-inference" / "run.sh"
-REMOTE_VLA_RUN = REPO_ROOT / "remote-vla-inference" / "run_client.sh"
+LOCAL_VLA_DIR = REPO_ROOT / "local-vla-inference"
 REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep148_prod2.json"
+DEFAULT_POLICY = "ajkoder/g1-pickup-ball-act"
+DEFAULT_CLAMP = 0.002
+DEFAULT_CAMERA = "zmq://192.168.123.164:55555"
 
 
 def run_pickup_policy(cfg: OrchestratorConfig) -> None:
@@ -35,43 +34,69 @@ def run_pickup_policy(cfg: OrchestratorConfig) -> None:
         logger.info("Pickup replay finished")
         return
 
-    if cfg.backend is PickupBackend.LOCAL:
-        script = LOCAL_VLA_RUN
-        cmd = [str(script), f"--duration={cfg.pickup_duration_s}"]
-        if cfg.iface:
-            cmd.append(f"--iface={cfg.iface}")
-    elif cfg.backend is PickupBackend.REMOTE:
-        script = REMOTE_VLA_RUN
-        if not cfg.remote_server:
-            raise ValueError(
-                "remote backend requires --remote-server HOST:PORT "
-                "(policy server started via remote-vla-inference/run_server.sh)"
-            )
-        cmd = [str(script), f"--server_address={cfg.remote_server}"]
-        # remote client currently reads iface via env var, not CLI.
-    else:  # pragma: no cover -- exhaustive
+    if cfg.backend is PickupBackend.REMOTE:
+        raise NotImplementedError(
+            "remote backend is not imported in-process yet; use soccerbot --backend local|replay "
+            "or the remote-vla-inference client directly"
+        )
+
+    if cfg.backend is not PickupBackend.LOCAL:
         raise AssertionError(f"unknown backend: {cfg.backend}")
 
-    cmd.extend(cfg.pickup_extra_args)
+    if str(LOCAL_VLA_DIR) not in sys.path:
+        sys.path.insert(0, str(LOCAL_VLA_DIR))
+    import main as local_vla  # type: ignore[import-not-found]
 
-    if not script.exists():
-        raise FileNotFoundError(f"pickup launcher missing: {script}")
+    # Optional extras: --policy / --clamp / --camera forwarded after '--'.
+    policy = DEFAULT_POLICY
+    clamp = DEFAULT_CLAMP
+    camera = DEFAULT_CAMERA
+    layout = "14d"
+    extra = list(cfg.pickup_extra_args)
+    # Tiny argv parse for common flags without another ArgumentParser.
+    i = 0
+    while i < len(extra):
+        tok = extra[i]
+        if tok.startswith("--policy="):
+            policy = tok.split("=", 1)[1]
+        elif tok == "--policy" and i + 1 < len(extra):
+            i += 1
+            policy = extra[i]
+        elif tok.startswith("--clamp="):
+            clamp = float(tok.split("=", 1)[1])
+        elif tok == "--clamp" and i + 1 < len(extra):
+            i += 1
+            clamp = float(extra[i])
+        elif tok.startswith("--camera="):
+            camera = tok.split("=", 1)[1]
+        elif tok == "--camera" and i + 1 < len(extra):
+            i += 1
+            camera = extra[i]
+        elif tok.startswith("--layout="):
+            layout = tok.split("=", 1)[1]
+        elif tok == "--layout" and i + 1 < len(extra):
+            i += 1
+            layout = extra[i]
+        i += 1
 
-    logger.info("Starting pickup policy: %s", " ".join(cmd))
-    result = subprocess.run(cmd, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"pickup policy exited non-zero ({result.returncode}); aborting demo"
-        )
+    args = local_vla.build_args(
+        layout=layout,
+        policy=policy,
+        iface=cfg.iface,
+        camera=camera,
+        clamp=clamp,
+        duration=cfg.pickup_duration_s,
+        leave_arms_engaged=True,
+        rerun=True,
+    )
+    logger.info(
+        "Starting in-process ACT pickup: policy=%s clamp=%.3f camera=%s",
+        policy,
+        clamp,
+        camera,
+    )
+    local_vla.run(args)
     logger.info("Pickup policy finished cleanly")
-
-
-# ---------------------------------------------------------------------------
-# Standalone entry point: run just Stage 1.
-#   python3 pickup.py --backend local  --iface eth0 --pickup-duration 15
-#   python3 pickup.py --backend remote --remote-server modal.host:50051
-#   python3 pickup.py --backend replay --iface eth0
-# ---------------------------------------------------------------------------
 
 
 def _cli() -> int:
@@ -115,5 +140,4 @@ def _cli() -> int:
 
 
 if __name__ == "__main__":
-    import sys
     sys.exit(_cli())

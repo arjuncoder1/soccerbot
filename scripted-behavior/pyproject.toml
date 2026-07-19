@@ -5,10 +5,32 @@ description = "Hardcoded (non-learned) post-pickup state machine: turn, human-de
 readme = "README.md"
 requires-python = ">=3.12"
 # unitree_sdk2py / cyclonedds 0.10.2 need Python 3.12 — install on the robot via
-# local-vla-inference/install.sh (or a dedicated 3.12 venv), not the root 3.13 sync.
-# throw.py / g1_arm_fk.py have zero third-party dependencies (stdlib only) so
-# --dry-run and the test suite run anywhere; only --execute needs unitree_sdk2py.
+# ./install.sh (or local-vla-inference/install.sh), not a 3.13-only sync.
+# Logic imports sibling local-vla-inference via sys.path (see arm_replay / throw);
+# keep this package free of a hard install dep so throw dry-run stays lightweight.
 dependencies = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "main",
+    "config",
+    "dds",
+    "pickup",
+    "turn_180",
+    "sidestep",
+    "avoid",
+    "throw",
+    "arm_replay",
+    "g1_arm_fk",
+    "human_detector_teleimager",
+    "diag_loco",
+    "diag_log",
+    "test_throw",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["."]

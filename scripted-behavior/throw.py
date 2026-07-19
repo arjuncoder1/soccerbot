@@ -69,6 +69,7 @@ import sys
 import time
 from pathlib import Path
 
+from dds import ensure_dds
 from g1_arm_fk import LEFT_ARM, RIGHT_ARM, check_limits, left_elbow_position, left_hand_position
 
 logger = logging.getLogger(__name__)
@@ -179,26 +180,44 @@ def _push_target(current_pose: dict[str, float]) -> dict[str, float]:
     }
 
 
+# Default per-tick slew limit while interpolating the throw (rad/step @ 50 Hz).
+THROW_SLEW_CLAMP = 0.02
+
+
 def _interpolate_to(
     arms,
     start: dict[str, float],
     target: dict[str, float],
     duration_s: float,
     control_dt: float = 0.02,
+    slew_clamp: float = THROW_SLEW_CLAMP,
 ) -> None:
-    """Linearly interpolate the 14 arm joints from ``start`` to ``target``."""
+    """Linearly interpolate the 14 arm joints from ``start`` to ``target``.
+
+    Each tick is also slew-rate limited so a short ``duration_s`` cannot command
+    an unsafe jump even if the start/target gap is large.
+    """
     num_steps = max(1, int(duration_s / control_dt))
+    cmd = dict(start)
     for step in range(1, num_steps + 1):
         step_start = time.time()
         alpha = step / num_steps
-        action = {key: start[key] * (1 - alpha) + target[key] * alpha for key in ARM_JOINT_KEYS}
-        arms.send_arm_positions(action)
+        desired = {key: start[key] * (1 - alpha) + target[key] * alpha for key in ARM_JOINT_KEYS}
+        if slew_clamp and slew_clamp > 0:
+            for key in ARM_JOINT_KEYS:
+                delta = desired[key] - cmd[key]
+                if abs(delta) > slew_clamp:
+                    delta = slew_clamp if delta > 0 else -slew_clamp
+                cmd[key] = cmd[key] + delta
+        else:
+            cmd = desired
+        arms.send_arm_positions(cmd)
         elapsed = time.time() - step_start
         sleep_s = max(0.0, control_dt - elapsed)
         time.sleep(sleep_s)
 
 
-def throw(arms) -> None:
+def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
     """Run the gentle push against a connected, already-engaged ``G1Arms``.
 
     Reads the CURRENT arm position and treats it as the ball-holding pose --
@@ -207,7 +226,10 @@ def throw(arms) -> None:
     is already engaged (e.g. via ``arms.hold_current_pose()``); does not
     release it afterward -- the caller decides what happens next.
     """
-    logger.info("Starting gentle goalkeeper push from current arm position")
+    logger.info(
+        "Starting gentle goalkeeper push from current arm position (slew=%.3f rad/step)",
+        slew_clamp,
+    )
     start_pose = arms.get_arm_positions()
     release_pose = _push_target(start_pose)
     follow_through_pose = dict(release_pose)
@@ -217,12 +239,37 @@ def throw(arms) -> None:
         follow_through_pose[key] = max(lo, min(hi, release_pose[key] + _FOLLOW_THROUGH_EXTRA_WRIST_PITCH))
 
     logger.info("-> release (%.2fs)", RELEASE_DURATION_S)
-    _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S)
+    _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S, slew_clamp=slew_clamp)
     logger.info("-> follow_through (%.2fs)", FOLLOW_THROUGH_DURATION_S)
-    _interpolate_to(arms, release_pose, follow_through_pose, FOLLOW_THROUGH_DURATION_S)
+    _interpolate_to(
+        arms, release_pose, follow_through_pose, FOLLOW_THROUGH_DURATION_S, slew_clamp=slew_clamp
+    )
     logger.info("-> recover (%.2fs)", RECOVER_DURATION_S)
-    _interpolate_to(arms, follow_through_pose, start_pose, RECOVER_DURATION_S)
+    _interpolate_to(arms, follow_through_pose, start_pose, RECOVER_DURATION_S, slew_clamp=slew_clamp)
     logger.info("Push complete.")
+
+
+def throw_ball(cfg, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
+    """Orchestrator entry point: connect arms (or reuse engaged overlay) and push.
+
+    Expects DDS already initialized by a prior stage (pickup / turn / avoid).
+    Uses a no-ramp ``weight=1`` publish so we don't jerk if arm_sdk is already on.
+    """
+    ensure_dds(getattr(cfg, "iface", None))
+    # g1_arms lives in the sibling local-vla-inference package (flat layout).
+    if str(_LOCAL_VLA_INFERENCE_DIR) not in sys.path:
+        sys.path.insert(0, str(_LOCAL_VLA_INFERENCE_DIR))
+    from g1_arms import G1Arms  # noqa: E402 -- path bootstrap for sibling package
+
+    arms = G1Arms(kp=60.0, kd=1.5)
+    arms.connect()
+    hold = dict(arms.get_arm_positions())
+    arms.send_arm_positions(hold, weight=1.0)
+    try:
+        throw(arms, slew_clamp=slew_clamp)
+    finally:
+        # Leave engaged — caller / orchestrator owns teardown + Ctrl+C reset.
+        pass
 
 
 def _mirror_for_check(active: dict[str, float]) -> dict[str, float]:

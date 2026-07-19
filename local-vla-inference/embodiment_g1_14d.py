@@ -49,6 +49,10 @@ assert len(ARM_JOINTS) == len(FEATURE_NAMES) == STATE_ACTION_DIM
 CAMERA_KEY = "color_0"
 IMAGE_SHAPE = (720, 1280, 3)  # H, W, C — cleaned dataset records 720p
 
+# Default Hub id for 14-D G1 ball-pickup ACT (may be private; pass a local
+# --policy path if Hub auth is unavailable).
+DEFAULT_POLICY_ID = "ajkoder/g1-pickup-ball-act"
+
 
 def dataset_features() -> dict:
     """LeRobot feature dict for ``build_inference_frame`` / ``make_robot_action``."""

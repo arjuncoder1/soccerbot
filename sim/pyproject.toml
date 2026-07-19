@@ -6,5 +6,12 @@ requires-python = ">=3.12"
 dependencies = []
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# Project lives in sim/ with modules at the package root; expose as import `sim`.
+[tool.setuptools]
+packages = ["sim"]
+
+[tool.setuptools.package-dir]
+sim = "."
