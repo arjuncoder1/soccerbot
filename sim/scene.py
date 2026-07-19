@@ -4,6 +4,9 @@ Run standalone on the Brev instance to verify assets load correctly:
     python3 sim/scene.py
 
 Requires Isaac Sim 6.0.1+ Python environment (isaacsim package).
+
+IMPORTANT: SimulationApp must be instantiated before any other isaacsim
+imports (Carbonite framework requirement).
 """
 
 from __future__ import annotations
@@ -22,9 +25,29 @@ TABLE_POSITION = (0.8, 0.0, 0.0)  # ~80 cm in front of robot
 BALL_POSITION = (0.8, 0.0, 0.75)  # on the table surface
 BALL_RADIUS = 0.04  # soccer ball ~8 cm diameter
 
+# Module-level handle; set by ensure_sim_app().
+_simulation_app = None
+
+
+def ensure_sim_app(headless: bool = True):
+    """Instantiate SimulationApp exactly once (must happen before other imports)."""
+    global _simulation_app
+    if _simulation_app is not None:
+        return _simulation_app
+    from isaacsim import SimulationApp
+
+    _simulation_app = SimulationApp({"headless": headless})
+    logger.info("SimulationApp instantiated (headless=%s)", headless)
+    return _simulation_app
+
 
 def build_scene():
-    """Create the demo scene. Returns (world, robot_articulation, ball_prim)."""
+    """Create the demo scene. Returns (world, robot_articulation, ball_prim).
+
+    Calls ensure_sim_app() automatically — safe to call multiple times.
+    """
+    ensure_sim_app()
+
     from isaacsim.core import World
     from isaacsim.core.objects import DynamicSphere
     from isaacsim.core.utils.stage_utils import add_reference_to_stage
