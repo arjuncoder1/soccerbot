@@ -16,8 +16,10 @@ in sibling packages that soccerbot imports in-process:
 # one-time robot setup (Python 3.12 + CycloneDDS)
 ./install.sh
 
-# headed killswitch in a second terminal (keep open during demos)
+# killswitch in a second terminal (CLI by default — no tkinter needed)
 ./killswitch.sh --iface enp5s0
+./killswitch.sh --iface enp5s0 home          # one-shot arms → home
+./killswitch.sh --gui --iface enp5s0         # Tk GUI (+ GO HOME button)
 
 # full demo: ACT pickup → turn → avoid → throw
 ./run_soccerbot.sh --iface enp5s0
@@ -35,9 +37,10 @@ Defaults match the validated local ACT command:
 
 ## Safety
 
-- Every arm command path is slew-clamped (ACT + replay + throw).
+- Every arm command path is slew-clamped (ACT + replay + throw + go-home).
 - **Ctrl+C** → graceful reset: `LocoClient.StopMove()` + release `arm_sdk`.
-- **`./killswitch.sh`** → headed GUI: Stop Move / Damp / Zero Torque / Start.
+- **`./killswitch.sh`** → CLI (default) or `--gui`: Stop / Go Home / Damp / Zero Torque / Start.
+- Home pose defaults to Unitree zeros; override via `scripted-behavior/home_pose.json`.
 
 ## Diagnose
 

@@ -100,11 +100,25 @@ PY
   fi
 
   if "$VENV_DIR/bin/python" - <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path("soccerbot/src").resolve()))
+from soccerbot.home import DEFAULT_HOME_Q, load_home_pose
+pose = load_home_pose()
+assert len(pose) == 14
+assert all(abs(v) < 1e-9 for v in pose.values()) or Path("scripted-behavior/home_pose.json").is_file()
+print("home pose ok", len(pose))
+PY
+  then ok "home pose loader"
+  else soft "home pose loader failed"
+  fi
+
+  if "$VENV_DIR/bin/python" - <<'PY'
 import tkinter  # noqa: F401
 print("tkinter ok")
 PY
-  then ok "tkinter (headed killswitch)"
-  else soft "tkinter missing — install python3-tk for ./killswitch.sh"
+  then ok "tkinter (optional --gui killswitch)"
+  else soft "tkinter missing — CLI killswitch still works; install python3-tk for --gui"
   fi
 
   # local-vla defaults (avoid importing cv2/torch-heavy main unless deps present)

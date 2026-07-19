@@ -1,18 +1,25 @@
-"""Headed killswitch panel for the Unitree G1.
+"""G1 killswitch — CLI (default) and optional Tk GUI.
 
-Big on-screen buttons (tkinter) that map to the same safety actions as the
-physical pendant:
+Actions (same as physical pendant where applicable):
 
-  STOP / STAND  — StopMove + (optional) leave balancer standing
-  DAMP          — LocoClient.Damp()           (pendant L2+B)
-  ZERO TORQUE   — LocoClient.ZeroTorque()     (pendant L2+A)
-  START         — LocoClient.Start()          (re-engage balancer)
+  stop   — LocoClient.StopMove() (stay standing)
+  damp   — LocoClient.Damp()           (pendant L2+B)
+  zero   — LocoClient.ZeroTorque()     (pendant L2+A)
+  start  — LocoClient.Start()          (re-engage balancer)
+  home   — slew-clamped go-to-home arm pose (zeros / home_pose.json)
 
-Run separately from the demo so it stays usable even if the policy process
-hangs:
+Usage:
 
+    # CLI interactive (no GUI / no tkinter required)
     ./killswitch.sh --iface enp5s0
     python -m soccerbot.killswitch --iface enp5s0
+
+    # CLI one-shot
+    ./killswitch.sh --iface enp5s0 stop
+    ./killswitch.sh --iface enp5s0 home
+
+    # Tk GUI
+    ./killswitch.sh --gui --iface enp5s0
 """
 
 from __future__ import annotations
@@ -23,7 +30,8 @@ import sys
 import threading
 import time
 
-from soccerbot.safety import balance_stand, enter_damp, enter_zero_torque, stop_loco
+from soccerbot.home import go_home
+from soccerbot.safety import balance_stand, enter_damp, enter_zero_torque, init_loco, stop_loco
 
 logger = logging.getLogger("soccerbot.killswitch")
 
@@ -37,6 +45,102 @@ FSM_NAMES = {
     500: "advanced (main operation)",
 }
 
+ACTIONS = ("stop", "damp", "zero", "start", "home", "status")
+
+
+def _fsm_status(loco) -> str:
+    try:
+        code, fsm_id = loco.GetFsmId()
+        name = FSM_NAMES.get(int(fsm_id), f"fsm {fsm_id}")
+        return f"FSM={fsm_id} ({name}) rpc={code}"
+    except Exception as exc:  # noqa: BLE001
+        return f"FSM read failed: {exc}"
+
+
+def run_action(action: str, *, iface: str | None, loco=None) -> None:
+    """Execute one killswitch / home action."""
+    action = action.lower().strip()
+    if action == "stop":
+        stop_loco(loco, iface=iface)
+    elif action == "damp":
+        enter_damp(iface=iface, loco=loco)
+    elif action == "zero":
+        enter_zero_torque(iface=iface, loco=loco)
+    elif action == "start":
+        balance_stand(iface=iface, loco=loco)
+    elif action == "home":
+        go_home(iface=iface, release_after=False)
+    elif action == "status":
+        client = loco or init_loco(iface)
+        print(_fsm_status(client), flush=True)
+    else:
+        raise ValueError(f"unknown action {action!r}; choose from {ACTIONS}")
+
+
+# ---------------------------------------------------------------------------
+# CLI (no GUI)
+# ---------------------------------------------------------------------------
+
+
+def run_cli(iface: str | None, action: str | None = None) -> int:
+    """One-shot action, or interactive prompt loop."""
+    loco = None
+    try:
+        loco = init_loco(iface)
+        print(f"killswitch CLI armed  iface={iface or '(default)'}  {_fsm_status(loco)}", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("DDS connect deferred (%s); will retry on first command", exc)
+
+    if action:
+        run_action(action, iface=iface, loco=loco)
+        return 0
+
+    print(
+        "Commands: stop | damp | zero | start | home | status | quit\n"
+        "  stop  = StopMove (stay standing)\n"
+        "  damp  = Damp (L2+B)\n"
+        "  zero  = ZeroTorque (L2+A — limp)\n"
+        "  start = balancer Start\n"
+        "  home  = arms go home (slew-clamped)\n",
+        flush=True,
+    )
+    while True:
+        try:
+            line = input("killswitch> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(flush=True)
+            return 130
+        if not line:
+            continue
+        cmd = line.split()[0].lower()
+        if cmd in ("q", "quit", "exit"):
+            return 0
+        if cmd in ("help", "?"):
+            print("Commands:", ", ".join(ACTIONS), "| quit", flush=True)
+            continue
+        if cmd == "damp":
+            confirm = input("Enter Damp? [y/N] ").strip().lower()
+            if confirm not in ("y", "yes"):
+                continue
+        if cmd == "zero":
+            confirm = input("Enter ZeroTorque (limp)? Spotter ready? [y/N] ").strip().lower()
+            if confirm not in ("y", "yes"):
+                continue
+        try:
+            if loco is None:
+                loco = init_loco(iface)
+            run_action(cmd, iface=iface, loco=loco)
+            if loco is not None and cmd != "status":
+                print(_fsm_status(loco), flush=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("%s failed", cmd)
+            print(f"ERROR: {exc}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# GUI (tkinter)
+# ---------------------------------------------------------------------------
+
 
 def _require_tkinter():
     try:
@@ -44,8 +148,9 @@ def _require_tkinter():
         from tkinter import messagebox, ttk
     except ModuleNotFoundError as exc:
         raise SystemExit(
-            "tkinter is required for the headed killswitch.\n"
+            "tkinter is required for --gui.\n"
             "Install: sudo apt-get install -y python3-tk\n"
+            "Or use the CLI (default): ./killswitch.sh --iface enp5s0\n"
             f"Original error: {exc}"
         ) from exc
     return tk, messagebox, ttk
@@ -63,22 +168,20 @@ class KillswitchApp:
         self.root = tk.Tk()
         self.root.title("G1 KILLSWITCH")
         self.root.configure(bg="#1a1a1a")
-        self.root.geometry("520x560")
-        self.root.minsize(480, 520)
+        self.root.geometry("520x640")
+        self.root.minsize(480, 600)
 
-        title = tk.Label(
+        tk.Label(
             self.root,
             text="G1 KILLSWITCH",
             font=("Helvetica", 28, "bold"),
             fg="#ff4444",
             bg="#1a1a1a",
-        )
-        title.pack(pady=(16, 4))
+        ).pack(pady=(16, 4))
 
-        iface_text = iface or "(default DDS iface)"
         tk.Label(
             self.root,
-            text=f"iface: {iface_text}",
+            text=f"iface: {iface or '(default DDS iface)'}",
             font=("Helvetica", 11),
             fg="#aaaaaa",
             bg="#1a1a1a",
@@ -101,6 +204,9 @@ class KillswitchApp:
         self._mk_button(btn_frame, "STOP MOVE\n(stay standing)", "#cc8800", self._on_stop).pack(
             fill="x", pady=6
         )
+        self._mk_button(btn_frame, "GO HOME\n(arms → home pose)", "#2266aa", self._on_home).pack(
+            fill="x", pady=6
+        )
         self._mk_button(btn_frame, "DAMP\n(L2+B)", "#dd6622", self._on_damp).pack(fill="x", pady=6)
         self._mk_button(btn_frame, "ZERO TORQUE\n(L2+A — limp)", "#cc2222", self._on_zero).pack(
             fill="x", pady=6
@@ -112,7 +218,9 @@ class KillswitchApp:
         ttk.Separator(self.root).pack(fill="x", padx=24, pady=8)
         tk.Label(
             self.root,
-            text="Keep this window open during demos.\nPhysical pendant still works in parallel.",
+            text="Keep this window open during demos.\n"
+            "CLI mode (no GUI): ./killswitch.sh --iface …\n"
+            "Physical pendant still works in parallel.",
             font=("Helvetica", 10),
             fg="#888888",
             bg="#1a1a1a",
@@ -140,12 +248,10 @@ class KillswitchApp:
     def _connect_async(self) -> None:
         def worker() -> None:
             try:
-                from soccerbot.safety import init_loco
-
                 loco = init_loco(self.iface)
                 with self._lock:
                     self._loco = loco
-                self._set_status("DDS connected — killswitch armed")
+                self._set_status(f"DDS connected — {_fsm_status(loco)}")
             except Exception as exc:  # noqa: BLE001
                 logger.exception("killswitch connect failed")
                 self._set_status(f"CONNECT FAILED: {exc}")
@@ -164,7 +270,10 @@ class KillswitchApp:
                 loco = self._loco
             try:
                 fn(loco)
-                self._set_status(f"{label} OK @ {time.strftime('%H:%M:%S')}")
+                with self._lock:
+                    loco = self._loco
+                extra = f"  {_fsm_status(loco)}" if loco is not None else ""
+                self._set_status(f"{label} OK @ {time.strftime('%H:%M:%S')}{extra}")
             except Exception as exc:  # noqa: BLE001
                 logger.exception("%s failed", label)
                 self._set_status(f"{label} FAILED: {exc}")
@@ -176,6 +285,14 @@ class KillswitchApp:
 
     def _on_stop(self) -> None:
         self._with_loco(lambda loco: stop_loco(loco, iface=self.iface), "STOP MOVE")
+
+    def _on_home(self) -> None:
+        if not self._messagebox.askokcancel(
+            "GO HOME",
+            "Move arms to home pose (slew-clamped)?\nSpotter should be ready.",
+        ):
+            return
+        self._with_loco(lambda _loco: go_home(iface=self.iface, release_after=False), "GO HOME")
 
     def _on_damp(self) -> None:
         if not self._messagebox.askokcancel("DAMP", "Enter Damp mode? Robot will go passive."):
@@ -199,12 +316,7 @@ class KillswitchApp:
                 loco = self._loco
             if loco is None:
                 return
-            try:
-                code, fsm_id = loco.GetFsmId()
-                name = FSM_NAMES.get(int(fsm_id), f"fsm {fsm_id}")
-                self._set_status(f"FSM={fsm_id} ({name})  rpc={code}")
-            except Exception:  # noqa: BLE001
-                pass
+            self._set_status(_fsm_status(loco))
 
         threading.Thread(target=worker, daemon=True).start()
         self.root.after(1000, self._poll_fsm)
@@ -213,12 +325,36 @@ class KillswitchApp:
         self.root.mainloop()
 
 
+def run_gui(iface: str | None) -> int:
+    KillswitchApp(iface).run()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Entry
+# ---------------------------------------------------------------------------
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Headed G1 killswitch panel.")
+    p = argparse.ArgumentParser(
+        description="G1 killswitch (CLI by default; --gui for Tk panel).",
+    )
     p.add_argument(
         "--iface",
         default=None,
         help="DDS network interface (e.g. enp5s0). Omit for SDK default.",
+    )
+    p.add_argument(
+        "--gui",
+        action="store_true",
+        help="Open the Tk killswitch window (needs python3-tk).",
+    )
+    p.add_argument(
+        "action",
+        nargs="?",
+        default=None,
+        choices=list(ACTIONS),
+        help="Optional one-shot CLI action (stop/damp/zero/start/home/status).",
     )
     return p.parse_args(argv)
 
@@ -230,10 +366,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parse_args(argv)
     try:
-        KillswitchApp(args.iface).run()
+        if args.gui:
+            if args.action:
+                logger.warning("Ignoring one-shot action %r in --gui mode", args.action)
+            return run_gui(args.iface)
+        return run_cli(args.iface, action=args.action)
     except KeyboardInterrupt:
         return 130
-    return 0
 
 
 if __name__ == "__main__":

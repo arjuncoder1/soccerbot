@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Headed G1 killswitch panel (Stop / Damp / ZeroTorque / Start).
+# G1 killswitch — CLI by default; pass --gui for the Tk panel.
+#
+#   ./killswitch.sh --iface enp5s0              # interactive CLI
+#   ./killswitch.sh --iface enp5s0 stop         # one-shot StopMove
+#   ./killswitch.sh --iface enp5s0 home         # arms → home pose
+#   ./killswitch.sh --gui --iface enp5s0        # Tk GUI (+ GO HOME button)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +21,6 @@ export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PAT
 export PATH="$VENV_DIR/bin:$PATH"
 export PYTHONPATH="$REPO_ROOT/soccerbot/src${PYTHONPATH:+:$PYTHONPATH}"
 
-# Prefer console script if installed; else module path.
 if command -v soccerbot-killswitch >/dev/null 2>&1; then
   exec soccerbot-killswitch "$@"
 fi

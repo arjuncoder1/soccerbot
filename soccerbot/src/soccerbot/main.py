@@ -13,7 +13,8 @@ Pipeline:
   4. THROW    — relative push (slew-clamped)
 
 Ctrl+C runs a graceful reset (StopMove + release arm_sdk). Keep
-``./killswitch.sh`` open in another terminal for headed Damp / ZeroTorque.
+``./killswitch.sh`` (CLI) or ``./killswitch.sh --gui`` open for Stop / Home /
+Damp / ZeroTorque.
 """
 
 from __future__ import annotations
@@ -160,7 +161,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.iface,
         cfg.rerun,
     )
-    logger.info("Tip: keep ./killswitch.sh --iface %s open in another terminal", cfg.iface or "<iface>")
+    logger.info(
+        "Tip: keep ./killswitch.sh --iface %s (or --gui) open in another terminal",
+        cfg.iface or "<iface>",
+    )
 
     t0 = time.time()
     try:

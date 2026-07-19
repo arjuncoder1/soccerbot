@@ -1,0 +1,22 @@
+{
+  "name": "g1_arm_home_zeros",
+  "kind": "arm_qpos_14d",
+  "joints_order": [
+    "kLeftShoulderPitch",
+    "kLeftShoulderRoll",
+    "kLeftShoulderYaw",
+    "kLeftElbow",
+    "kLeftWristRoll",
+    "kLeftWristPitch",
+    "kLeftWristYaw",
+    "kRightShoulderPitch",
+    "kRightShoulderRoll",
+    "kRightShoulderYaw",
+    "kRightElbow",
+    "kRightWristRoll",
+    "kRightWristPitch",
+    "kRightWristYaw"
+  ],
+  "q": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "notes": "Unitree arm SDK home (ctrl_dual_arm_go_home): all arm joints at 0 rad. Edit this file to set a custom ready pose."
+}
