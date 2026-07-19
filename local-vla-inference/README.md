@@ -42,4 +42,8 @@ export CYCLONEDDS_HOME=$HOME/cyclonedds/install
 # live arm joint positions; optional CSV logging
 ./local-vla-inference/run.sh diag_joints.py --iface eth0
 ./local-vla-inference/run.sh diag_joints.py --iface eth0 --csv joints.csv --fps 30
+
+# record 14 arm joints to JSON (Ctrl+C to stop), then replay via arm_sdk
+./local-vla-inference/run.sh record_arms.py --iface eth0 -o arms.json
+./local-vla-inference/run.sh replay_arms.py --iface eth0 arms.json
 ```
