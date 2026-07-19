@@ -101,7 +101,7 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         default=DEFAULT_CLAMP_RAD,
         help="ACT slew clamp rad/step (default 0.002).",
     )
-    p.add_argument("--pickup-duration", type=float, default=30.0)
+    p.add_argument("--pickup-duration", type=float, default=45.0)
     p.add_argument("--fps", type=float, default=30.0)
     p.add_argument("--device", default=None)
     p.add_argument("--teleimager-host", default="192.168.123.164")

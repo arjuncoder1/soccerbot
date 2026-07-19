@@ -31,7 +31,7 @@ class OrchestratorConfig:
     policy: str = DEFAULT_POLICY
     layout: str = "14d"
     clamp: float = DEFAULT_CLAMP_RAD
-    pickup_duration_s: float = 30.0
+    pickup_duration_s: float = 45.0
     fps: float = 30.0
     device: str | None = None
     teleimager_host: str = "192.168.123.164"
