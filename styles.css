@@ -1,16 +1,16 @@
 /* ============ Soccerbot portal — design tokens ============ */
 :root {
-  --bg: #0a0c10;
-  --bg-elev: #12151b;
-  --bg-elev-2: #181c24;
-  --border: #262b35;
-  --text: #eef1f6;
-  --text-dim: #9aa3b2;
-  --text-faint: #636c7a;
-  --accent: #5eead4;
-  --accent-2: #60a5fa;
-  --accent-warn: #fbbf24;
-  --accent-bad: #f87171;
+  --bg: #f7f8fa;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #f1f3f6;
+  --border: #e3e6ec;
+  --text: #14171c;
+  --text-dim: #545c6c;
+  --text-faint: #8991a1;
+  --accent: #0d9488;
+  --accent-2: #2563eb;
+  --accent-warn: #b45309;
+  --accent-bad: #dc2626;
   --radius: 14px;
   --maxw: 1120px;
   --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
@@ -52,31 +52,38 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: space-between;
   padding: 16px 28px;
-  background: linear-gradient(to bottom, rgba(10,12,16,0.92), rgba(10,12,16,0));
-  backdrop-filter: blur(6px);
-  transition: background 0.3s ease;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0));
+  transition: background 0.3s ease, backdrop-filter 0.3s ease;
+  color: #fff;
 }
-.nav.scrolled { background: rgba(10,12,16,0.86); border-bottom: 1px solid var(--border); }
+.nav.scrolled {
+  background: rgba(255,255,255,0.86);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  box-shadow: 0 1px 0 rgba(15,23,42,0.03);
+}
 .nav-brand {
   font-weight: 700;
   letter-spacing: 0.02em;
   font-size: 15px;
-  color: var(--text);
+  color: inherit;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.nav-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.nav-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: #5eead4; box-shadow: 0 0 12px rgba(94,234,212,0.8); }
 .nav-links { display: flex; gap: 24px; font-size: 13.5px; }
-.nav-links a { color: var(--text-dim); }
-.nav-links a:hover { color: var(--text); text-decoration: none; }
+.nav-links a { color: inherit; opacity: 0.78; }
+.nav-links a:hover { opacity: 1; text-decoration: none; }
 .nav-cta {
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.35);
   padding: 7px 14px;
   border-radius: 999px;
-  color: var(--text) !important;
+  color: inherit !important;
   font-size: 13px;
 }
+.nav.scrolled .nav-cta { border-color: var(--border); }
 .nav-cta:hover { border-color: var(--accent); text-decoration: none; }
 
 /* ---------- Hero (scripted sequence) ---------- */
@@ -103,7 +110,7 @@ a:hover { text-decoration: underline; }
 
 .hero-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.25) 70%, rgba(6,7,10,0.96) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.3) 72%, rgba(247,248,250,0.98) 100%);
   z-index: 2;
   pointer-events: none;
 }
@@ -121,7 +128,7 @@ a:hover { text-decoration: underline; }
   font-size: 12.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: #5eead4;
   margin-bottom: 14px;
 }
 .hero-title {
@@ -131,10 +138,11 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   letter-spacing: -0.02em;
   max-width: 900px;
+  color: #fff;
 }
 .hero-sub {
   font-size: clamp(1rem, 1.6vw, 1.25rem);
-  color: var(--text-dim);
+  color: rgba(255,255,255,0.8);
   max-width: 620px;
   margin: 0 0 28px;
 }
@@ -144,9 +152,9 @@ a:hover { text-decoration: underline; }
   font-size: 11.5px;
   padding: 6px 11px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.08);
 }
 .hero-progress {
   position: absolute;
@@ -166,7 +174,7 @@ a:hover { text-decoration: underline; }
   display: block;
   height: 100%;
   width: 0%;
-  background: var(--accent);
+  background: #5eead4;
   transition: width 0.1s linear;
 }
 .hero-progress .seg.done > i { width: 100%; transition: none; }
@@ -176,14 +184,14 @@ a:hover { text-decoration: underline; }
   z-index: 4;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
+  color: rgba(255,255,255,0.85);
+  border: 1px solid rgba(255,255,255,0.3);
   background: rgba(0,0,0,0.4);
   padding: 6px 10px;
   border-radius: 999px;
   cursor: pointer;
 }
-.hero-tap:hover { color: var(--text); border-color: var(--accent); }
+.hero-tap:hover { color: #fff; border-color: #5eead4; }
 
 /* ---------- Sections ---------- */
 section { padding: 110px 0; position: relative; }
@@ -215,7 +223,7 @@ h2.section-title {
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg-elev);
-  box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6);
+  box-shadow: 0 24px 48px -28px rgba(15,23,42,0.18);
 }
 .media-frame video, .media-frame iframe { width: 100%; display: block; background: #000; }
 .media-caption {
@@ -271,12 +279,12 @@ h2.section-title {
 }
 .model-card.chosen {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 20px 50px -30px rgba(94,234,212,0.35);
+  box-shadow: 0 0 0 1px var(--accent), 0 20px 44px -28px rgba(13,148,136,0.35);
 }
 .model-card .chosen-tag {
   position: absolute; top: -11px; right: 18px;
   background: var(--accent);
-  color: #06110f;
+  color: #ffffff;
   font-family: var(--mono);
   font-size: 10.5px;
   font-weight: 700;
@@ -341,7 +349,7 @@ h2.section-title {
 .challenge-problem { margin: 0 0 10px; color: var(--text-dim); font-size: 0.94rem; }
 .challenge-resolution { margin: 0; color: var(--text-dim); font-size: 0.94rem; }
 .challenge-resolution strong { color: var(--text); }
-.challenge-problem code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; }
+.challenge-problem code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: rgba(15,23,42,0.06); padding: 1px 6px; border-radius: 4px; }
 
 /* ---------- Architecture ---------- */
 .arch-diagram {
@@ -371,7 +379,30 @@ h2.section-title {
 .stack-table th { color: var(--text-faint); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
 .stack-table td.status-ok { color: var(--accent); font-family: var(--mono); font-size: 12px; }
 .stack-table td.status-todo { color: var(--text-faint); font-family: var(--mono); font-size: 12px; }
-.stack-table code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 4px; }
+.stack-table code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: rgba(15,23,42,0.06); padding: 1px 6px; border-radius: 4px; }
+
+/* ---------- Closing clip ---------- */
+.closing-clip { padding: 0; border-top: 1px solid var(--border); background: #000; }
+.closing-clip-inner { position: relative; padding: 0; max-width: none; }
+.closing-clip-video {
+  width: 100%;
+  max-height: 46vh;
+  object-fit: cover;
+  display: block;
+  opacity: 0.92;
+}
+.closing-clip-caption {
+  position: absolute;
+  bottom: 16px; left: 28px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.75);
+  background: rgba(0,0,0,0.4);
+  padding: 5px 10px;
+  border-radius: 999px;
+}
 
 /* ---------- Footer ---------- */
 footer {

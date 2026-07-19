@@ -48,6 +48,16 @@ heroVideo.addEventListener('timeupdate', () => {
 heroVideo.addEventListener('ended', switchToReel);
 heroSkip.addEventListener('click', switchToReel);
 
+// ---------- closing clip: loop just the first few seconds ----------
+const CLOSING_CLIP_SECONDS = 4;
+const closingClip = document.getElementById('closingClip');
+if (closingClip) {
+  closingClip.addEventListener('timeupdate', () => {
+    if (closingClip.currentTime >= CLOSING_CLIP_SECONDS) closingClip.currentTime = 0;
+  });
+  closingClip.play().catch(() => {});
+}
+
 // autoplay can be blocked on some browsers until interaction; fall back gracefully
 heroVideo.play().catch(() => {
   // if autoplay is blocked, go straight to the reel on first user interaction
