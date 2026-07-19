@@ -1,8 +1,8 @@
-"""Run ACT inference on Unitree G1D arms only (no hands / fingers).
+"""Run ACT inference on Unitree G1 arms only (no hands / fingers).
 
-Policy: ``myx160/unitree_lerobot_act_g1d_16d_001`` (16-D). We command the
-14 arm joints via the official ``rt/arm_sdk`` DDS topic and zero-pad /
-ignore the last 2 dims.
+Layouts:
+  - ``16d`` — Hub ACT ``myx160/unitree_lerobot_act_g1d_16d_001`` (14 arms + 2 pad)
+  - ``14d`` — cleaned G1 dataset / local ACT (``left_arm_*`` / ``right_arm_*``, ``color_0``)
 
 Everything runs on this machine:
   - state:   subscribe ``rt/lowstate`` (DDS)
@@ -13,7 +13,8 @@ Everything runs on this machine:
 Usage:
 
     export CYCLONEDDS_HOME=$HOME/cyclonedds/install
-    ./local-vla-inference/run.sh --iface eth0
+    ./local-vla-inference/run.sh --iface enp5s0 --layout 14d \\
+      --policy ~/soccerbot/model/pretrained_model
 """
 
 from __future__ import annotations
@@ -23,19 +24,12 @@ import csv
 import logging
 import time
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import numpy as np
 import torch
 
-from embodiment_g1d_16d import (
-    ARM_JOINTS,
-    CAMERA_KEYS,
-    DEFAULT_POLICY_ID,
-    IMAGE_SHAPE,
-    UNUSED_PAD,
-    dataset_features,
-)
 from front_camera import make_front_camera
 from g1_arms import G1Arms
 
@@ -43,6 +37,16 @@ logger = logging.getLogger(__name__)
 
 _LOCAL_POLICY_MARKERS = ("/", "./", "../", "~")
 _REQUIRED_POLICY_FILES = ("config.json", "model.safetensors")
+
+
+def load_layout(name: str) -> ModuleType:
+    if name == "14d":
+        import embodiment_g1_14d as layout
+    elif name == "16d":
+        import embodiment_g1d_16d as layout
+    else:
+        raise ValueError(f"Unknown layout {name!r}; use 14d or 16d")
+    return layout
 
 
 def resolve_policy_ref(policy: str) -> str:
@@ -79,14 +83,24 @@ def resolve_policy_ref(policy: str) -> str:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="ACT inference for G1D arms-only via direct DDS (rt/arm_sdk)."
+        description="ACT inference for G1 arms-only via direct DDS (rt/arm_sdk)."
     )
-    p.add_argument("--policy", default=DEFAULT_POLICY_ID, help="Hub repo id or local checkpoint path.")
+    p.add_argument(
+        "--layout",
+        choices=("14d", "16d"),
+        default="16d",
+        help="Observation/action layout. Use 14d for cleaned G1 ACT checkpoints.",
+    )
+    p.add_argument(
+        "--policy",
+        default=None,
+        help="Hub repo id or local checkpoint path. Default depends on --layout.",
+    )
     p.add_argument("--device", default=None, help="cuda / cpu / mps (default: cuda if available).")
     p.add_argument(
         "--iface",
         default=None,
-        help="Network interface connected to the robot (e.g. eth0, enp2s0). "
+        help="Network interface connected to the robot (e.g. eth0, enp5s0). "
         "Omit to use the DDS default.",
     )
     p.add_argument(
@@ -134,39 +148,47 @@ def resolve_device(name: str | None) -> torch.device:
     return torch.device("cpu")
 
 
-def pack_observation(arm_obs: dict[str, float], front_rgb: np.ndarray) -> dict[str, Any]:
+def pack_observation_16d(layout: ModuleType, arm_obs: dict[str, float], front_rgb: np.ndarray) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for joint in ARM_JOINTS:
+    for joint in layout.ARM_JOINTS:
         key = f"{joint}.q"
         if key not in arm_obs:
             raise KeyError(f"Missing arm joint in observation: {key}")
         out[key] = arm_obs[key]
-    for pad in UNUSED_PAD:
+    for pad in layout.UNUSED_PAD:
         out[pad] = 0.0
-    for cam in CAMERA_KEYS:
+    for cam in layout.CAMERA_KEYS:
         out[cam] = front_rgb
     return out
 
 
-def dry_run(policy, preprocess, postprocess, device: torch.device) -> None:
+def action_to_dds(layout: ModuleType, robot_action: dict[str, float]) -> dict[str, float]:
+    """Map policy action keys to DDS ``<joint>.q`` for G1Arms."""
+    if hasattr(layout, "to_dds_action"):
+        return layout.to_dds_action(robot_action)
+    return {f"{j}.q": float(robot_action[f"{j}.q"]) for j in layout.ARM_JOINTS}
+
+
+def dry_run(layout: ModuleType, policy, preprocess, postprocess, device: torch.device) -> None:
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
-    features = dataset_features()
-    fake_obs = {f"{j}.q": 0.0 for j in ARM_JOINTS}
-    for pad in UNUSED_PAD:
-        fake_obs[pad] = 0.0
-    blank = np.zeros(IMAGE_SHAPE, dtype=np.uint8)
-    for cam in CAMERA_KEYS:
-        fake_obs[cam] = blank
+    features = layout.dataset_features()
+    if hasattr(layout, "pack_observation"):
+        blank = np.zeros(layout.IMAGE_SHAPE, dtype=np.uint8)
+        fake_measured = {f"{j}.q": 0.0 for j in layout.ARM_JOINTS}
+        fake_obs = layout.pack_observation(fake_measured, blank)
+    else:
+        fake_obs = pack_observation_16d(layout, {f"{j}.q": 0.0 for j in layout.ARM_JOINTS}, np.zeros(layout.IMAGE_SHAPE, dtype=np.uint8))
 
     frame = build_inference_frame(observation=fake_obs, ds_features=features, device=device)
     batch = preprocess(frame)
     action = policy.select_action(batch)
     action = postprocess(action)
     robot_action = make_robot_action(action, features)
-    arm_keys = [f"{j}.q" for j in ARM_JOINTS]
+    dds_action = action_to_dds(layout, robot_action)
+    arm_keys = [f"{j}.q" for j in layout.ARM_JOINTS]
     logger.info("Dry-run OK. Arm action dims=%d", len(arm_keys))
-    logger.info("Sample arm action: %s", {k: round(robot_action[k], 4) for k in arm_keys[:4]})
+    logger.info("Sample arm action: %s", {k: round(dds_action[k], 4) for k in arm_keys[:4]})
 
 
 def run(args: argparse.Namespace) -> None:
@@ -174,9 +196,15 @@ def run(args: argparse.Namespace) -> None:
     from lerobot.policies.act import ACTPolicy
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
+    layout = load_layout(args.layout)
+    default_policy = getattr(layout, "DEFAULT_POLICY_ID", None)
+    policy_arg = args.policy or default_policy
+    if not policy_arg:
+        raise SystemExit("--policy is required for --layout 14d (no default Hub id).")
+
     device = resolve_device(args.device)
-    policy_ref = resolve_policy_ref(args.policy)
-    logger.info("Loading ACT policy %s on %s", policy_ref, device)
+    policy_ref = resolve_policy_ref(policy_arg)
+    logger.info("Loading ACT policy %s on %s (layout=%s)", policy_ref, device, args.layout)
 
     policy = ACTPolicy.from_pretrained(policy_ref)
     policy.to(device)
@@ -186,10 +214,15 @@ def run(args: argparse.Namespace) -> None:
         policy.config,
         pretrained_path=policy_ref,
     )
-    features = dataset_features()
+    features = layout.dataset_features()
+    pack_obs = (
+        layout.pack_observation
+        if hasattr(layout, "pack_observation")
+        else lambda arm_obs, rgb: pack_observation_16d(layout, arm_obs, rgb)
+    )
 
     if args.dry_run:
-        dry_run(policy, preprocess, postprocess, device)
+        dry_run(layout, policy, preprocess, postprocess, device)
         return
 
     # One DDS init per process; shared by arms + camera clients.
@@ -209,11 +242,11 @@ def run(args: argparse.Namespace) -> None:
     # Engage arm_sdk smoothly at the current pose before the policy takes over.
     arms.hold_current_pose(ramp_s=2.0)
 
-    h, w, _ = IMAGE_SHAPE
+    h, w, _ = layout.IMAGE_SHAPE
     dt = 1.0 / args.fps
     t0 = time.time()
     step = 0
-    arm_keys = [f"{j}.q" for j in ARM_JOINTS]
+    arm_keys = [f"{j}.q" for j in layout.ARM_JOINTS]
     # Commanded pose starts at the measured pose; each step it creeps toward
     # the policy target by at most --clamp rad, so motion stays slow no matter
     # what the policy outputs.
@@ -227,13 +260,15 @@ def run(args: argparse.Namespace) -> None:
     log_file.write(f"# args: {vars(args)}\n")
     log_writer.writerow(
         ["t", "step", "cam_ms", "policy_ms", "loop_ms", "clamp_hits", "max_target_gap"]
-        + [f"target_{j}" for j in ARM_JOINTS]
-        + [f"cmd_{j}" for j in ARM_JOINTS]
+        + [f"target_{j}" for j in layout.ARM_JOINTS]
+        + [f"cmd_{j}" for j in layout.ARM_JOINTS]
         + snapshot_keys
     )
     logger.info(
-        "ACT loop @ %.1f Hz via rt/arm_sdk, clamp=%.3f rad/step, log=%s (Ctrl+C to FREEZE and stop)",
+        "ACT loop @ %.1f Hz via rt/arm_sdk, layout=%s, clamp=%.3f rad/step, log=%s "
+        "(Ctrl+C to FREEZE and stop)",
         args.fps,
+        args.layout,
         args.clamp,
         log_path,
     )
@@ -254,28 +289,29 @@ def run(args: argparse.Namespace) -> None:
             measured = {k: snapshot[k] for k in arm_keys}
 
             policy_start = time.perf_counter()
-            obs = pack_observation(measured, front_rgb)
+            obs = pack_obs(measured, front_rgb)
             frame = build_inference_frame(observation=obs, ds_features=features, device=device)
             batch = preprocess(frame)
             with torch.inference_mode():
                 action = policy.select_action(batch)
             action = postprocess(action)
             robot_action = make_robot_action(action, features)
+            dds_action = action_to_dds(layout, robot_action)
             policy_ms = (time.perf_counter() - policy_start) * 1000
 
             clamp_hits = 0
             if args.clamp and args.clamp > 0:
                 for key in arm_keys:
-                    delta = float(robot_action[key]) - cmd_q[key]
+                    delta = float(dds_action[key]) - cmd_q[key]
                     if abs(delta) > args.clamp:
                         clamp_hits += 1
                     cmd_q[key] += float(np.clip(delta, -args.clamp, args.clamp))
             else:
                 for key in arm_keys:
-                    cmd_q[key] = float(robot_action[key])
+                    cmd_q[key] = float(dds_action[key])
             arms.send_arm_positions(cmd_q)
 
-            gaps = [abs(float(robot_action[k]) - measured[k]) for k in arm_keys]
+            gaps = [abs(float(dds_action[k]) - measured[k]) for k in arm_keys]
             max_gap = max(gaps)
             loop_ms = (time.perf_counter() - loop_start) * 1000
             log_writer.writerow(
@@ -288,7 +324,7 @@ def run(args: argparse.Namespace) -> None:
                     clamp_hits,
                     round(max_gap, 5),
                 ]
-                + [round(float(robot_action[k]), 5) for k in arm_keys]
+                + [round(float(dds_action[k]), 5) for k in arm_keys]
                 + [round(cmd_q[k], 5) for k in arm_keys]
                 + [round(snapshot[k], 5) for k in snapshot_keys]
             )
