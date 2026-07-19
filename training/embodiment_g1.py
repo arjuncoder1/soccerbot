@@ -21,6 +21,17 @@ _ARM_SUFFIXES = (
 
 EMBODIMENT_TAG = "new_embodiment"
 BASE_MODEL_PATH = "nvidia/GR00T-N1.7-3B"
+
+# π0.5 pretrained aliases for --pi-base (Hub ids).
+PI05_BASE_ALIASES: dict[str, str] = {
+    "original": "lerobot/pi05_base",
+    # Same checkpoint remote-vla-inference serves (G1 box-move finetune).
+    "g1-boxmove": "sudoping01/pi05_g1_boxmove_v2",
+}
+DEFAULT_PI05_BASE = "g1-boxmove"
+# Back-compat alias for the remote-vla default checkpoint.
+PI05_PRETRAINED_PATH = PI05_BASE_ALIASES[DEFAULT_PI05_BASE]
+
 STATE_ACTION_DIM = 14
 
 # Flat LeRobot feature names: left arm, right arm.

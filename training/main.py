@@ -3,6 +3,7 @@
 Examples:
     modal run training/main.py --dataset ./my_dataset --gpu H200 --policy act --steps 50000
     modal run training/main.py --dataset ./g1_demos --gpu B200 --policy groot --steps 5000
+    modal run training/main.py --dataset ./g1_demos --gpu A100 --policy pi05 --pi-base original --steps 3000
     python training/main.py --dataset user/my_dataset --gpu B200 --policy molmoact2 --steps 10000 --lr 1e-5
 """
 
@@ -19,7 +20,9 @@ import modal
 
 from embodiment_g1 import (
     BASE_MODEL_PATH,
+    DEFAULT_PI05_BASE,
     EMBODIMENT_TAG,
+    PI05_BASE_ALIASES,
     validate_dataset_layout,
 )
 
@@ -105,7 +108,7 @@ train_image = (
         ],
     )
     .run_commands(
-        "cd /opt/lerobot && uv pip install --system -e '.[dataset,training,groot,molmoact2]'",
+        "cd /opt/lerobot && uv pip install --system -e '.[dataset,training,groot,molmoact2,pi]'",
     )
 )
 
@@ -138,6 +141,7 @@ class TrainRequest:
     save_freq: int | None = None
     log_freq: int | None = None
     only_action_expert_ft: bool = False
+    pi_base: str = DEFAULT_PI05_BASE
     extra_args: tuple[str, ...] = ()
 
 
@@ -272,6 +276,19 @@ def build_lerobot_args(req: TrainRequest) -> list[str]:
                 "--policy.use_relative_actions=true",
             ]
         )
+    elif req.policy == "pi05":
+        pretrained = PI05_BASE_ALIASES[req.pi_base]
+        args.extend(
+            [
+                f"--policy.pretrained_path={pretrained}",
+                "--policy.dtype=bfloat16",
+                "--policy.gradient_checkpointing=true",
+                # Matches remote-vla: compile_model=True stalls/SIGSEGVs on Modal torch.
+                "--policy.compile_model=false",
+            ]
+        )
+        if req.only_action_expert_ft:
+            args.append("--policy.train_expert_only=true")
     elif req.policy == "molmoact2":
         # Default finetune mode is LoRA on the VLM; --onlyactionexpertft switches
         # to freezing everything except the action expert (requires continuous mode).
@@ -386,7 +403,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help=(
             "MolmoAct2: freeze VLM / train action expert only (disables LoRA). "
+            "π0.5: --policy.train_expert_only=true. "
             "Groot already uses action-expert-only by default; flag is accepted as a no-op."
+        ),
+    )
+    parser.add_argument(
+        "--pi-base",
+        choices=sorted(PI05_BASE_ALIASES),
+        default=DEFAULT_PI05_BASE,
+        help=(
+            "π0.5 pretrained checkpoint alias (--policy.pretrained_path). "
+            f"original={PI05_BASE_ALIASES['original']}; "
+            f"g1-boxmove={PI05_BASE_ALIASES['g1-boxmove']} (remote-vla default)."
         ),
     )
     parser.add_argument(
@@ -410,8 +438,12 @@ def request_from_args(args: argparse.Namespace) -> TrainRequest:
     push_to_hub = bool(args.push_to_hub or args.policy_repo_id)
     if args.push_to_hub and not args.policy_repo_id:
         raise ValueError("--push-to-hub requires --policy-repo-id.")
-    if args.only_action_expert_ft and args.policy not in {"molmoact2", "groot"}:
-        raise ValueError("--onlyactionexpertft is only supported with --policy molmoact2 or groot.")
+    if args.only_action_expert_ft and args.policy not in {"molmoact2", "groot", "pi05"}:
+        raise ValueError(
+            "--onlyactionexpertft is only supported with --policy molmoact2, groot, or pi05."
+        )
+    if args.pi_base != DEFAULT_PI05_BASE and args.policy != "pi05":
+        raise ValueError("--pi-base is only supported with --policy pi05.")
 
     if args.policy == "groot" and dataset.is_local and dataset.local_path is not None:
         validate_dataset_layout(dataset.local_path)
@@ -433,6 +465,7 @@ def request_from_args(args: argparse.Namespace) -> TrainRequest:
         save_freq=args.save_freq,
         log_freq=args.log_freq,
         only_action_expert_ft=args.only_action_expert_ft,
+        pi_base=args.pi_base,
         extra_args=tuple(args.extra_arg or ()),
     )
 
@@ -506,6 +539,12 @@ def submit_training(req: TrainRequest) -> int:
         print(
             f"Groot: {BASE_MODEL_PATH} embodiment={EMBODIMENT_TAG} "
             "(backbone frozen, DiT+projector trainable, no LoRA, 14-D G1 arms-only)"
+        )
+    if req.policy == "pi05":
+        expert = "expert-only" if req.only_action_expert_ft else "full finetune"
+        pretrained = PI05_BASE_ALIASES[req.pi_base]
+        print(
+            f"π0.5: --pi-base={req.pi_base} → {pretrained} ({expert}, compile off)"
         )
     if req.lr is None:
         print("Learning rate: policy default preset")

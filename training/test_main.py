@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from embodiment_g1 import STATE_ACTION_DIM, STATE_ACTION_NAMES
+from embodiment_g1 import (
+    DEFAULT_PI05_BASE,
+    PI05_BASE_ALIASES,
+    STATE_ACTION_DIM,
+    STATE_ACTION_NAMES,
+)
 from main import (
     TrainRequest,
     build_lerobot_args,
@@ -189,12 +194,73 @@ def test_molmoact2_onlyactionexpertft() -> None:
     assert "--policy.action_mode=continuous" in lerobot_args
 
 
-def test_onlyactionexpertft_requires_molmoact2_or_groot() -> None:
+def test_onlyactionexpertft_requires_supported_policy() -> None:
     args = parse_args(
         ["--dataset", "user/ds", "--policy", "act", "--onlyactionexpertft"]
     )
-    with pytest.raises(ValueError, match="molmoact2 or groot"):
+    with pytest.raises(ValueError, match="molmoact2, groot, or pi05"):
         request_from_args(args)
+
+
+def test_pi05_defaults_to_g1_boxmove() -> None:
+    req = TrainRequest(
+        dataset=resolve_dataset("user/ds"),
+        policy="pi05",
+        gpu="A100",
+        steps=3000,
+    )
+    assert req.pi_base == DEFAULT_PI05_BASE
+    args = build_lerobot_args(req)
+    assert f"--policy.pretrained_path={PI05_BASE_ALIASES['g1-boxmove']}" in args
+    assert "--policy.dtype=bfloat16" in args
+    assert "--policy.gradient_checkpointing=true" in args
+    assert "--policy.compile_model=false" in args
+    assert all(not a.startswith("--policy.train_expert_only=") for a in args)
+
+
+def test_pi05_base_original() -> None:
+    args = parse_args(
+        [
+            "--dataset",
+            "user/ds",
+            "--policy",
+            "pi05",
+            "--steps",
+            "1000",
+            "--pi-base",
+            "original",
+        ]
+    )
+    req = request_from_args(args)
+    assert req.pi_base == "original"
+    lerobot_args = build_lerobot_args(req)
+    assert f"--policy.pretrained_path={PI05_BASE_ALIASES['original']}" in lerobot_args
+
+
+def test_pi_base_requires_pi05() -> None:
+    args = parse_args(
+        ["--dataset", "user/ds", "--policy", "act", "--pi-base", "original"]
+    )
+    with pytest.raises(ValueError, match="--pi-base"):
+        request_from_args(args)
+
+
+def test_pi05_onlyactionexpertft() -> None:
+    args = parse_args(
+        [
+            "--dataset",
+            "user/ds",
+            "--policy",
+            "pi05",
+            "--steps",
+            "1000",
+            "--onlyactionexpertft",
+        ]
+    )
+    req = request_from_args(args)
+    lerobot_args = build_lerobot_args(req)
+    assert "--policy.train_expert_only=true" in lerobot_args
+    assert f"--policy.pretrained_path={PI05_BASE_ALIASES['g1-boxmove']}" in lerobot_args
 
 
 def test_groot_onlyactionexpertft_accepted() -> None:
