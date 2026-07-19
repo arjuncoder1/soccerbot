@@ -39,6 +39,7 @@ members = [
     "remote-vla-inference",
     "scripted-behavior",
     "soccerbot",
+    "soccerbot-sim",
     "soccerbot-workspace",
     "training",
 ]
@@ -3688,7 +3689,7 @@ wheels = [
 [[package]]
 name = "local-vla-inference"
 version = "0.1.0"
-source = { virtual = "local-vla-inference" }
+source = { editable = "local-vla-inference" }
 dependencies = [
     { name = "lerobot" },
     { name = "pyzmq" },
@@ -6400,7 +6401,7 @@ wheels = [
 [[package]]
 name = "scripted-behavior"
 version = "0.1.0"
-source = { virtual = "scripted-behavior" }
+source = { editable = "scripted-behavior" }
 
 [[package]]
 name = "send2trash"
@@ -6523,7 +6524,24 @@ wheels = [
 [[package]]
 name = "soccerbot"
 version = "0.1.0"
-source = { virtual = "soccerbot" }
+source = { editable = "soccerbot" }
+dependencies = [
+    { name = "lerobot" },
+    { name = "local-vla-inference" },
+    { name = "scripted-behavior" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lerobot", editable = "thirdparty/lerobot" },
+    { name = "local-vla-inference", editable = "local-vla-inference" },
+    { name = "scripted-behavior", editable = "scripted-behavior" },
+]
+
+[[package]]
+name = "soccerbot-sim"
+version = "0.1.0"
+source = { editable = "sim" }
 
 [[package]]
 name = "soccerbot-workspace"

@@ -1,12 +1,27 @@
 [project]
 name = "soccerbot"
 version = "0.1.0"
-description = "Add your description here"
+description = "Core G1 soccer-ball pickup orchestrator (workspace-local; not published to PyPI)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "realsense-human-detection",
     "local-vla-inference",
-    "remote-vla-inference",
     "scripted-behavior",
+    "lerobot",
 ]
+
+[project.scripts]
+soccerbot = "soccerbot.main:main"
+soccerbot-killswitch = "soccerbot.killswitch:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/soccerbot"]
+
+[tool.uv.sources]
+local-vla-inference = { workspace = true }
+scripted-behavior = { workspace = true }
+lerobot = { workspace = true }

@@ -28,7 +28,6 @@ from types import ModuleType
 from typing import Any
 
 import numpy as np
-import torch
 
 from front_camera import make_front_camera
 from g1_arms import G1Arms
@@ -121,7 +120,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="RAD",
         help="Slew limit: max radians any arm joint may move per control step toward the "
         "policy target. Default 0.01 (~0.3 rad/s at 30 fps = super slow). "
-        "Use --clamp 0 to disable.",
+        "Use --clamp 0 to disable. Soccerbot pickup uses 0.002.",
     )
     p.add_argument(
         "--log",
@@ -141,10 +140,55 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Read one real camera frame + arm angles (rt/lowstate), run policy, print the "
         "predicted action chunk; never publish rt/arm_sdk / never command motors.",
     )
+    p.add_argument(
+        "--leave-arms-engaged",
+        action="store_true",
+        help="On clean exit, leave arm_sdk engaged at the last pose so a following "
+        "scripted stage can take over without a re-engage jerk. Ctrl+C still does a "
+        "graceful reset (StopMove + release).",
+    )
     return p.parse_args(argv)
 
 
-def resolve_device(name: str | None) -> torch.device:
+def build_args(
+    *,
+    layout: str = "14d",
+    policy: str = "ajkoder/g1-pickup-ball-act",
+    iface: str | None = None,
+    camera: str = "zmq://192.168.123.164:55555",
+    clamp: float = 0.002,
+    duration: float = 45.0,
+    fps: float = 30.0,
+    device: str | None = None,
+    leave_arms_engaged: bool = True,
+    dry_run: bool = False,
+    image_no_motors: bool = False,
+    log: str | None = None,
+    kp: float = 60.0,
+    kd: float = 1.5,
+) -> argparse.Namespace:
+    """Programmatic Namespace for in-process callers (soccerbot orchestrator)."""
+    return argparse.Namespace(
+        layout=layout,
+        policy=policy,
+        iface=iface,
+        camera=camera,
+        clamp=clamp,
+        duration=duration,
+        fps=fps,
+        device=device,
+        dry_run=dry_run,
+        image_no_motors=image_no_motors,
+        leave_arms_engaged=leave_arms_engaged,
+        log=log,
+        kp=kp,
+        kd=kd,
+    )
+
+
+def resolve_device(name: str | None):
+    import torch
+
     if name:
         return torch.device(name)
     if torch.cuda.is_available():
@@ -175,7 +219,7 @@ def action_to_dds(layout: ModuleType, robot_action: dict[str, float]) -> dict[st
     return {f"{j}.q": float(robot_action[f"{j}.q"]) for j in layout.ARM_JOINTS}
 
 
-def dry_run(layout: ModuleType, policy, preprocess, postprocess, device: torch.device) -> None:
+def dry_run(layout: ModuleType, policy, preprocess, postprocess, device) -> None:
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
     features = layout.dataset_features()
@@ -208,10 +252,11 @@ def print_action_trajectory(
     postprocess,
     features: dict,
     observation: dict[str, Any],
-    device: torch.device,
+    device,
     measured: dict[str, float] | None = None,
 ) -> None:
     """Run one ACT chunk prediction and print joint angles in policy units (radians)."""
+    import torch
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
     arm_keys = [f"{j}.q" for j in layout.ARM_JOINTS]
@@ -246,15 +291,12 @@ def image_no_motors(
     postprocess,
     features: dict,
     pack_obs,
-    device: torch.device,
+    device,
 ) -> None:
     """Real camera + read-only lowstate → print predicted trajectory. Never write motors."""
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from dds_init import ensure_dds
 
-    if args.iface:
-        ChannelFactoryInitialize(0, args.iface)
-    else:
-        ChannelFactoryInitialize(0)
+    ensure_dds(args.iface)
 
     arms = G1Arms(kp=args.kp, kd=args.kd)
     front = make_front_camera(args.camera)
@@ -281,7 +323,35 @@ def image_no_motors(
     logger.info("image-no-motors done (no motors commanded)")
 
 
+def _graceful_interrupt(arms: G1Arms, iface: str | None, front) -> None:
+    """Ctrl+C: stop loco velocity and hand arms back to the balancer."""
+    from dds_init import ensure_dds
+
+    logger.warning("Ctrl+C — graceful reset (StopMove + release arm_sdk)")
+    try:
+        ensure_dds(iface)
+        from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+        loco = LocoClient()
+        loco.SetTimeout(3.0)
+        loco.Init()
+        loco.StopMove()
+        logger.info("LocoClient.StopMove() sent")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("StopMove during interrupt failed: %s", exc)
+    try:
+        arms.release()
+        arms.detach()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("arm release during interrupt failed: %s", exc)
+    try:
+        front.disconnect()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("camera disconnect during interrupt failed: %s", exc)
+
+
 def run(args: argparse.Namespace) -> None:
+    import torch
     from lerobot.policies import make_pre_post_processors
     from lerobot.policies.act import ACTPolicy
     from lerobot.policies.utils import build_inference_frame, make_robot_action
@@ -323,12 +393,9 @@ def run(args: argparse.Namespace) -> None:
         return
 
     # One DDS init per process; shared by arms + camera clients.
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from dds_init import ensure_dds
 
-    if args.iface:
-        ChannelFactoryInitialize(0, args.iface)
-    else:
-        ChannelFactoryInitialize(0)
+    ensure_dds(args.iface)
 
     arms = G1Arms(kp=args.kp, kd=args.kd)
     front = make_front_camera(args.camera)
@@ -363,14 +430,15 @@ def run(args: argparse.Namespace) -> None:
     )
     logger.info(
         "ACT loop @ %.1f Hz via rt/arm_sdk, layout=%s, clamp=%.3f rad/step, log=%s "
-        "(Ctrl+C to FREEZE and stop)",
+        "(Ctrl+C = graceful reset: StopMove + release arm_sdk)",
         args.fps,
         args.layout,
         args.clamp,
         log_path,
     )
 
-    frozen = False
+    interrupted = False
+    leave_engaged = bool(getattr(args, "leave_arms_engaged", False))
     try:
         while True:
             loop_start = time.perf_counter()
@@ -411,9 +479,10 @@ def run(args: argparse.Namespace) -> None:
             gaps = [abs(float(dds_action[k]) - measured[k]) for k in arm_keys]
             max_gap = max(gaps)
             loop_ms = (time.perf_counter() - loop_start) * 1000
+            elapsed = time.time() - t0
             log_writer.writerow(
                 [
-                    round(time.time() - t0, 4),
+                    round(elapsed, 4),
                     step,
                     round(cam_ms, 1),
                     round(policy_ms, 1),
@@ -436,7 +505,7 @@ def run(args: argparse.Namespace) -> None:
                     "step=%d elapsed=%.1fs | target gap max=%.3f rad (%s) clamped=%d/14 | "
                     "leg max|dq|=%.2f rad/s | cam=%.0fms policy=%.0fms",
                     step,
-                    time.time() - t0,
+                    elapsed,
                     max_gap,
                     worst.removeprefix("k").removesuffix(".q"),
                     clamp_hits,
@@ -449,17 +518,32 @@ def run(args: argparse.Namespace) -> None:
             if sleep > 0:
                 time.sleep(sleep)
     except KeyboardInterrupt:
-        # Cut actions and freeze: hold the last commanded pose, keep arm_sdk engaged.
-        logger.info("Ctrl+C — freezing arms at last commanded pose")
-        arms.freeze(cmd_q)
-        frozen = True
+        interrupted = True
+        _graceful_interrupt(arms, args.iface, front)
     finally:
         log_file.close()
         logger.info("Step log written to %s (%d steps)", log_path, step)
-        front.disconnect()
-        if not frozen:
-            arms.disconnect()  # normal exit: ramp arm_sdk weight back to 0
-        logger.info("Done (frozen=%s)", frozen)
+        if not interrupted:
+            try:
+                front.disconnect()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("camera disconnect failed: %s", exc)
+            if leave_engaged:
+                # Hold last pose, then drop local DDS handles so the next
+                # in-process stage can own rt/arm_sdk without a second publisher.
+                try:
+                    arms.freeze(cmd_q)
+                    arms.detach()
+                    logger.info(
+                        "Clean exit: arm_sdk left engaged; local publisher detached for next stage"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("leave-engaged freeze/detach failed: %s", exc)
+            else:
+                arms.disconnect()
+        logger.info("Done (interrupted=%s leave_engaged=%s)", interrupted, leave_engaged)
+        if interrupted:
+            raise
 
 
 def main(argv: list[str] | None = None) -> None:

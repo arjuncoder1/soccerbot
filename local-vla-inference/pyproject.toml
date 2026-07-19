@@ -11,6 +11,25 @@ dependencies = [
     "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
 ]
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "main",
+    "g1_arms",
+    "front_camera",
+    "dds_init",
+    "embodiment_g1_14d",
+    "embodiment_g1d_16d",
+    "diag_health",
+    "diag_joints",
+    "diag_state",
+    "record_arms",
+    "replay_arms",
+]
+
 [tool.uv.sources]
 lerobot = { workspace = true }
 

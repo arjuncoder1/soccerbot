@@ -27,7 +27,7 @@ The live commands need:
 cd scripted-behavior
 
 # Local ACT policy for pickup (default backend).
-python3 main.py --iface eth0 --pickup-duration 30
+python3 main.py --iface eth0 --pickup-duration 45
 
 # Remote pi0.5 policy server for pickup.
 python3 main.py --backend remote --iface eth0 --remote-server 192.168.1.42:8000

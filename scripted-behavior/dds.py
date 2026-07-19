@@ -1,4 +1,4 @@
-"""Process-wide DDS init guard.
+"""Process-wide DDS init guard (re-exports local-vla-inference's singleton).
 
 Every live stage that talks to the robot must call ``ensure_dds`` before
 opening any ``unitree_sdk2py`` channels; the SDK's
@@ -7,24 +7,13 @@ opening any ``unitree_sdk2py`` channels; the SDK's
 
 from __future__ import annotations
 
-import logging
+import sys
+from pathlib import Path
 
-logger = logging.getLogger("scripted_behavior.dds")
+_LOCAL_VLA = Path(__file__).resolve().parent.parent / "local-vla-inference"
+if str(_LOCAL_VLA) not in sys.path:
+    sys.path.insert(0, str(_LOCAL_VLA))
 
-_initialized = False
+from dds_init import dds_initialized, ensure_dds  # noqa: E402
 
-
-def ensure_dds(iface: str | None) -> None:
-    """Idempotent ``ChannelFactoryInitialize``. Safe to call from any stage."""
-    global _initialized
-    if _initialized:
-        return
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-
-    if iface:
-        logger.info("DDS ChannelFactoryInitialize(0, %r)", iface)
-        ChannelFactoryInitialize(0, iface)
-    else:
-        logger.info("DDS ChannelFactoryInitialize(0) [default interface]")
-        ChannelFactoryInitialize(0)
-    _initialized = True
+__all__ = ["ensure_dds", "dds_initialized"]
