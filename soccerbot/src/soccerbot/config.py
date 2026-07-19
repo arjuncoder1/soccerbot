@@ -40,5 +40,7 @@ class OrchestratorConfig:
     replay_trajectory: Path = DEFAULT_REPLAY_TRAJECTORY
     # Scripted-stage slew clamps (rad/frame).
     replay_slew_clamp: float = 0.05
-    throw_slew_clamp: float = 0.02
+    # Loose on purpose: the throw needs ~1.7 rad/s to work; 0.06 @50Hz = 3 rad/s
+    # only catches garbage targets (see throw.THROW_SLEW_CLAMP).
+    throw_slew_clamp: float = 0.06
     pickup_extra_args: list[str] = field(default_factory=list)

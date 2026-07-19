@@ -180,8 +180,11 @@ def _push_target(current_pose: dict[str, float]) -> dict[str, float]:
     }
 
 
-# Default per-tick slew limit while interpolating the throw (rad/step @ 50 Hz).
-THROW_SLEW_CLAMP = 0.02
+# Default per-tick slew limit while interpolating the throw (rad/step @ 50 Hz
+# = 3 rad/s per joint). Deliberately loose: the release phase needs ~1.7 rad/s
+# to actually push the ball, so this only catches garbage targets — it is a
+# safety net, not a damper. The URDF limit clamp in G1Arms still applies.
+THROW_SLEW_CLAMP = 0.06
 
 
 def _interpolate_to(
