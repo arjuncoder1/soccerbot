@@ -120,7 +120,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="RAD",
         help="Slew limit: max radians any arm joint may move per control step toward the "
         "policy target. Default 0.01 (~0.3 rad/s at 30 fps = super slow). "
-        "Use --clamp 0 to disable. Soccerbot pickup uses 0.002.",
+        "Use --clamp 0 to disable. Soccerbot pickup uses 0.01.",
     )
     p.add_argument(
         "--log",
@@ -178,7 +178,7 @@ def build_args(
     policy: str = "ajkoder/g1-pickup-ball-act",
     iface: str | None = None,
     camera: str = "zmq://192.168.123.164:55555",
-    clamp: float = 0.002,
+    clamp: float = 0.01,
     duration: float = 30.0,
     fps: float = 30.0,
     device: str | None = None,

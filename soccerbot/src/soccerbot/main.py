@@ -7,7 +7,7 @@ Depends on workspace logic packages (not published to PyPI):
 
 Pipeline:
 
-  1. PICKUP   — ACT (``ajkoder/g1-pickup-ball-act``, clamp 0.002) or JSON replay
+  1. PICKUP   — ACT (``ajkoder/g1-pickup-ball-act``, clamp 0.01) or JSON replay
   2. TURN_180 — LocoClient yaw while holding arms
   3. AVOID    — teleimager YOLO + sidestep shuffle
   4. THROW    — relative push (slew-clamped)
@@ -120,7 +120,7 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         "--clamp",
         type=float,
         default=DEFAULT_CLAMP_RAD,
-        help="ACT slew clamp rad/step (default 0.002).",
+        help="ACT slew clamp rad/step (default 0.01).",
     )
     p.add_argument("--pickup-duration", type=float, default=30.0)
     p.add_argument("--fps", type=float, default=30.0)

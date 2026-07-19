@@ -20,7 +20,7 @@ logger = logging.getLogger("scripted_behavior.pickup")
 LOCAL_VLA_DIR = REPO_ROOT / "local-vla-inference"
 REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep148_prod2.json"
 DEFAULT_POLICY = "ajkoder/g1-pickup-ball-act"
-DEFAULT_CLAMP = 0.002
+DEFAULT_CLAMP = 0.01
 DEFAULT_CAMERA = "zmq://192.168.123.164:55555"
 _LOCAL_VLA_MODULE = "local_vla_inference_main"
 

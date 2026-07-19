@@ -83,7 +83,7 @@ sys.path.insert(0, str(Path("soccerbot/src").resolve()))
 import soccerbot
 from soccerbot.config import DEFAULT_POLICY, DEFAULT_CLAMP_RAD, DEFAULT_CAMERA
 assert DEFAULT_POLICY == "ajkoder/g1-pickup-ball-act"
-assert DEFAULT_CLAMP_RAD == 0.002
+assert DEFAULT_CLAMP_RAD == 0.01
 assert "55555" in DEFAULT_CAMERA
 print("soccerbot ok", soccerbot.__version__)
 PY
@@ -119,7 +119,7 @@ try:
     import main as local_vla
     args = local_vla.build_args()
     assert args.policy == "ajkoder/g1-pickup-ball-act"
-    assert args.clamp == 0.002
+    assert args.clamp == 0.01
     assert args.camera.endswith(":55555")
     print("local-vla build_args ok")
 except ModuleNotFoundError as exc:

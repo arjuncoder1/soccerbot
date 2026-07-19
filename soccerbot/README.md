@@ -36,7 +36,7 @@ Defaults match the validated local ACT command:
 
 - `--layout 14d`
 - `--policy ajkoder/g1-pickup-ball-act`
-- `--clamp 0.002`
+- `--clamp 0.01`
 - `--camera zmq://192.168.123.164:55555` (working teleimager head JPEG port)
 
 ## Safety

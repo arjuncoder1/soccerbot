@@ -11,7 +11,9 @@ from soccerbot.deps import REPO_ROOT
 # Working teleimager head stream (single ZMQ JPEG port — see local-vla-inference).
 DEFAULT_CAMERA = "zmq://192.168.123.164:55555"
 DEFAULT_POLICY = "ajkoder/g1-pickup-ball-act"
-DEFAULT_CLAMP_RAD = 0.002
+# Was 0.002 (~3.4°/s) which chronically undershot table reaches; 0.01 matches
+# the standalone local-vla-inference default (~17°/s at 30 Hz) — still slew-limited.
+DEFAULT_CLAMP_RAD = 0.01
 DEFAULT_REPLAY_TRAJECTORY = (
     REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep148_prod2.json"
 )
