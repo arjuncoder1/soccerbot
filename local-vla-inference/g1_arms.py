@@ -79,6 +79,11 @@ class G1Arms:
         self._cmd = None
         self._crc = None
         self._state_only = False
+        # Optional {joint_index: {'q','kp','kd'}} that ``send_arm_positions``
+        # will always overwrite on top of the arm keys. Callers opt in via
+        # ``lock_joint(...)``; empty by default so existing callers (e.g. the
+        # ACT/pi0.5 policy paths) see identical behaviour.
+        self._locked_joints: dict[int, dict[str, float]] = {}
 
     def connect(self, *, state_only: bool = False) -> None:
         """Requires ChannelFactoryInitialize() to have been called already.
@@ -169,8 +174,32 @@ class G1Arms:
             cmd.motor_cmd[idx].tau = 0.0
             cmd.motor_cmd[idx].kp = self.kp
             cmd.motor_cmd[idx].kd = self.kd
+        # Extra locked joints (e.g. waist yaw hold during pickup replay).
+        for idx, spec in self._locked_joints.items():
+            cmd.motor_cmd[idx].q = float(spec["q"])
+            cmd.motor_cmd[idx].dq = 0.0
+            cmd.motor_cmd[idx].tau = 0.0
+            cmd.motor_cmd[idx].kp = float(spec["kp"])
+            cmd.motor_cmd[idx].kd = float(spec["kd"])
         cmd.crc = self._crc.Crc(cmd)
         self._publisher.Write(cmd)
+
+    def lock_joint(self, index: int, q: float, kp: float, kd: float) -> None:
+        """Register an extra joint that every ``send_arm_positions`` will
+        also command. Used e.g. to pin waist yaw during arm-only replays so
+        the (compromised) balancer cannot twist it around. Off by default.
+        """
+        self._locked_joints[int(index)] = {"q": float(q), "kp": float(kp), "kd": float(kd)}
+        logger.info(
+            "G1Arms.lock_joint(idx=%d, q=%.4f, kp=%.1f, kd=%.1f) engaged",
+            index,
+            q,
+            kp,
+            kd,
+        )
+
+    def unlock_joint(self, index: int) -> None:
+        self._locked_joints.pop(int(index), None)
 
     def hold_current_pose(self, ramp_s: float = 2.0, control_dt: float = 0.02) -> None:
         """Ramp arm_sdk weight 0→1 while holding the current pose (safe engage)."""
