@@ -6,4 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 # unitree_sdk2py / cyclonedds 0.10.2 need Python 3.12 — install on the robot via
 # local-vla-inference/install.sh (or a dedicated 3.12 venv), not the root 3.13 sync.
+# throw.py / g1_arm_fk.py have zero third-party dependencies (stdlib only) so
+# --dry-run and the test suite run anywhere; only --execute needs unitree_sdk2py.
 dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
