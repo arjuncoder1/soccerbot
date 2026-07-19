@@ -10,6 +10,7 @@
   --accent: #5eead4;
   --accent-2: #60a5fa;
   --accent-warn: #fbbf24;
+  --accent-bad: #f87171;
   --radius: 14px;
   --maxw: 1120px;
   --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
@@ -255,11 +256,12 @@ h2.section-title {
 /* ---------- Models section ---------- */
 .model-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   margin-top: 8px;
 }
-@media (max-width: 800px) { .model-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .model-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .model-grid { grid-template-columns: 1fr; } }
 .model-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -302,6 +304,44 @@ h2.section-title {
   align-items: flex-start;
 }
 .pipeline-note .ico { font-size: 1.1rem; line-height: 1; margin-top: 2px; }
+
+/* ---------- Challenges ---------- */
+.challenge-list { display: flex; flex-direction: column; gap: 14px; }
+.challenge-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+.challenge-card.status-resolved { border-left-color: var(--accent); }
+.challenge-card.status-workaround { border-left-color: var(--accent-warn); }
+.challenge-card.status-open { border-left-color: var(--accent-bad); }
+.challenge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.challenge-head h3 { margin: 0; font-size: 1.05rem; }
+.status-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.status-badge.resolved { background: rgba(94,234,212,0.14); color: var(--accent); }
+.status-badge.workaround { background: rgba(251,191,36,0.14); color: var(--accent-warn); }
+.status-badge.open { background: rgba(248,113,113,0.14); color: var(--accent-bad); }
+.challenge-problem { margin: 0 0 10px; color: var(--text-dim); font-size: 0.94rem; }
+.challenge-resolution { margin: 0; color: var(--text-dim); font-size: 0.94rem; }
+.challenge-resolution strong { color: var(--text); }
+.challenge-problem code { font-family: var(--mono); font-size: 0.88em; color: var(--text); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; }
 
 /* ---------- Architecture ---------- */
 .arch-diagram {

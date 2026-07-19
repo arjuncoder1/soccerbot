@@ -17,6 +17,7 @@
     <a href="#augment">Augmentation</a>
     <a href="#detection">Human Detection</a>
     <a href="#models">Models</a>
+    <a href="#challenges">Challenges</a>
     <a href="#architecture">Architecture</a>
   </div>
   <a class="nav-cta" href="https://github.com/arjuncoder1/soccerbot" target="_blank" rel="noopener">GitHub ↗</a>
@@ -103,9 +104,10 @@
       <div class="col-text reveal">
         <div class="kicker"><span class="num">01</span> Data Collection</div>
         <h2 class="section-title">Teleop episodes, one pickup at a time</h2>
-        <p class="section-desc">Every training episode starts as a human-teleoperated demonstration of the G1 picking a ball off the table, recorded in LeRobot dataset format alongside synchronized RGB frames and 14-D arm state/action pairs. This raw teleop footage is the foundation both policies below were fine-tuned on.</p>
+        <p class="section-desc">Every training episode starts as a human-teleoperated demonstration of the G1 picking a ball off the table, recorded in LeRobot dataset format alongside synchronized RGB frames and 14-D arm state/action pairs. Getting here took a lot of trial and error on calibration and teleop mimicry (see <a href="#challenges">Challenges</a>) — the payoff was <a href="https://huggingface.co/datasets/ajkoder/g1_final_cleaned" target="_blank" rel="noopener">150 good samples</a>, of which 122 episodes went into the ACT fine-tune below.</p>
         <div class="pill-list">
-          <span class="pill">122 episodes collected</span>
+          <span class="pill">150 good samples collected</span>
+          <span class="pill">122 episodes used for fine-tuning</span>
           <span class="pill">LeRobot v3.0 format</span>
           <span class="pill">14-D state/action, arms-only</span>
         </div>
@@ -210,14 +212,22 @@
   <div class="wrap">
     <div class="section-head reveal">
       <div class="kicker"><span class="num">05</span> Models trained</div>
-      <h2 class="section-title">Two policy families, one winner</h2>
-      <p class="section-desc">Both candidates were fine-tuned on the same 14-D arms-only pickup task. ACT won out and became the deployed pickup policy; the augmented dataset above exists specifically to make that policy more robust before further training.</p>
+      <h2 class="section-title">Three policy families, one winner</h2>
+      <p class="section-desc">Pi 0.5, MolmoAct2, and ACT were all fine-tuned on the same 14-D arms-only pickup task and compared head-to-head. ACT-based policies came out on top; the plain ACT checkpoint became the deployed pickup policy, and the augmented dataset above exists specifically to make it more robust before further training.</p>
     </div>
 
     <div class="model-grid">
       <div class="model-card reveal">
         <h3>Pi 0.5</h3>
         <p>Vision-language-action policy evaluated as a candidate for the learned pickup phase.</p>
+        <div class="stat-row">
+          <div class="stat"><b>Candidate</b><span>Status</span></div>
+        </div>
+      </div>
+
+      <div class="model-card reveal">
+        <h3>MolmoAct2</h3>
+        <p>VLM-based action policy evaluated alongside Pi 0.5 and ACT on the same pickup task.</p>
         <div class="stat-row">
           <div class="stat"><b>Candidate</b><span>Status</span></div>
         </div>
@@ -236,7 +246,65 @@
 
     <div class="pipeline-note reveal">
       <span class="ico">↳</span>
-      <span>We ended up choosing the <strong>15k-step fine-tuned ACT policy</strong>, trained on <strong>122 teleop episodes</strong>, over Pi 0.5. That same 122-episode set is then run through KITE-ML augmentation (see above) to account for environment changes — new lighting, backgrounds, and scene variation — before further training passes.</span>
+      <span>We ended up choosing the <strong>15k-step fine-tuned ACT policy</strong>, trained on <strong>122 teleop episodes</strong>, over Pi 0.5 and MolmoAct2. That same 122-episode set is then run through KITE-ML augmentation (see above) to account for environment changes — new lighting, backgrounds, and scene variation — before further training passes.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CHALLENGES ================= -->
+<section id="challenges" class="tight">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker"><span class="num">06</span> Challenges &amp; lessons learned</div>
+      <h2 class="section-title">Not everything worked</h2>
+      <p class="section-desc">A humanoid on a soccer pitch surfaces problems that never show up in simulation. Some we solved with a tradeoff, some are still open.</p>
+    </div>
+
+    <div class="challenge-list">
+      <div class="challenge-card status-workaround reveal">
+        <div class="challenge-head">
+          <h3>Dexterous hand fine-control</h3>
+          <span class="status-badge workaround">Workaround</span>
+        </div>
+        <p class="challenge-problem">An electrical connection issue with the BrainCo Revo 2 hands as provided made fine finger control impossible.</p>
+        <p class="challenge-resolution"><strong>Resolution:</strong> couldn't fix the hardware fault, so we designed around it — the hand is held in a fixed pose and pickup is achieved through arm positioning alone. No finger use, no learned grasping.</p>
+      </div>
+
+      <div class="challenge-card status-resolved reveal">
+        <div class="challenge-head">
+          <h3>Teleop calibration &amp; mimicry</h3>
+          <span class="status-badge resolved">Resolved</span>
+        </div>
+        <p class="challenge-problem">Setting up teleoperation took a long time — calibrating the robot and the teleop rig so that human operator motion was accurately mirrored by the G1 was a persistent source of bad episodes.</p>
+        <p class="challenge-resolution"><strong>Resolution:</strong> after a lot of trial and error, we landed on a working calibration and collected <a href="https://huggingface.co/datasets/ajkoder/g1_final_cleaned" target="_blank" rel="noopener">150 good samples</a>, 122 of which went into the deployed ACT fine-tune.</p>
+      </div>
+
+      <div class="challenge-card status-resolved reveal">
+        <div class="challenge-head">
+          <h3>Picking a pickup policy</h3>
+          <span class="status-badge resolved">Resolved</span>
+        </div>
+        <p class="challenge-problem">We fine-tuned across several policy families — Pi 0.5, MolmoAct2, ACT — and had to pick whichever actually performed best on the real robot rather than on paper.</p>
+        <p class="challenge-resolution"><strong>Resolution:</strong> ACT, and an ACT variant initialized from Pi 0.5, consistently outperformed the alternatives, so the plain 15k-step ACT checkpoint shipped as the deployed policy.</p>
+      </div>
+
+      <div class="challenge-card status-open reveal">
+        <div class="challenge-head">
+          <h3>Manipulation / locomotion / balance clash</h3>
+          <span class="status-badge open">Unresolved</span>
+        </div>
+        <p class="challenge-problem">The manipulation policy, the locomotion controller, and the deployed goalkeeper behavior fought each other, and the balancer suffered most during programmed action steps. Specifically: when the manipulation policy engages <code>arms_sdk</code>, it somehow disables the waist hinge, and the robot starts bending over.</p>
+        <p class="challenge-resolution"><strong>Resolution:</strong> could not fix. We tried damping the waist hinge; the robot still bent over. Root cause remains open.</p>
+      </div>
+
+      <div class="challenge-card status-open reveal">
+        <div class="challenge-head">
+          <h3>Uncommanded spasms</h3>
+          <span class="status-badge open">Unresolved — safety</span>
+        </div>
+        <p class="challenge-problem">The G1 would periodically spasm, likely from a combination of policy clash and overheating — a severe safety concern during testing.</p>
+        <p class="challenge-resolution"><strong>Resolution:</strong> could not fix. Treated as an active safety risk requiring a killswitch and close supervision during every run.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -245,7 +313,7 @@
 <section id="architecture" class="tight">
   <div class="wrap">
     <div class="section-head reveal">
-      <div class="kicker"><span class="num">06</span> Architecture</div>
+      <div class="kicker"><span class="num">07</span> Architecture</div>
       <h2 class="section-title">How the pieces fit together</h2>
       <p class="section-desc">Pulled from the project's <a href="https://github.com/arjuncoder1/soccerbot" target="_blank" rel="noopener">GitHub README</a> — the pickup policy and the goalkeeper FSM are intentionally decoupled systems.</p>
     </div>
