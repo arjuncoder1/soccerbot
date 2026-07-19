@@ -16,6 +16,7 @@ members = [
     "scripted-behavior",
     "remote-vla-inference",
     "sim",
+    "data-pipeline",
 ]
 
 [tool.uv]

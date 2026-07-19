@@ -1,0 +1,14 @@
+[project]
+name = "data-pipeline"
+version = "0.1.0"
+description = "Rerun hackathon Track 3: ingest real G1 teleop episodes into Rerun recordings, catalog/query them, export back to LeRobot v3, replay from a recording."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # [dataset] for LeRobotDataset (Hub download + video decode), [viz] for rerun-sdk.
+    "lerobot[dataset,viz]",
+    "pandas>=2.0.0,<3.0.0",
+]
+
+[tool.uv.sources]
+lerobot = { workspace = true }
