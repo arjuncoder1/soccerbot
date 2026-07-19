@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT"
 VENV_DIR="${VENV_DIR:-$REPO_ROOT/.venv}"
 CYCLONE_PREFIX="${CYCLONEDDS_HOME:-${CYCLONE_PREFIX:-$HOME/cyclonedds/install}}"
 IFACE=""
@@ -30,7 +31,7 @@ bad()  { echo "  [FAIL] $*"; fail=$((fail + 1)); }
 soft() { echo "  [WARN] $*"; warn=$((warn + 1)); }
 
 echo "==> Soccerbot diagnose"
-echo "    repo: $REPO_ROOT"
+echo "    repo: $REPO_ROOT (cwd=$(pwd))"
 
 # --- toolchain ---
 if command -v uv >/dev/null 2>&1; then ok "uv: $(command -v uv)"; else bad "uv not on PATH"; fi

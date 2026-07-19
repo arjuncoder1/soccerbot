@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from soccerbot.config import OrchestratorConfig, PickupBackend
-from soccerbot.deps import ensure_logic_imports
+from soccerbot.deps import ensure_logic_imports, import_local_vla_main
 
 logger = logging.getLogger("soccerbot.pickup")
 
@@ -36,8 +36,8 @@ def run_pickup(cfg: OrchestratorConfig) -> None:
     if cfg.backend is not PickupBackend.LOCAL:
         raise AssertionError(f"unknown backend: {cfg.backend}")
 
-    # Import the ACT runner from the sibling package (same process, no subprocess).
-    import main as local_vla  # type: ignore[import-not-found]
+    # Load by unique module name so scripted-behavior/main.py cannot shadow it.
+    local_vla = import_local_vla_main()
 
     args = local_vla.build_args(
         layout=cfg.layout,

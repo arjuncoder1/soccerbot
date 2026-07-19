@@ -9,6 +9,7 @@ A third backend, ``replay``, streams a pre-recorded arm-qpos trajectory from
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import sys
 
@@ -21,6 +22,22 @@ REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_e
 DEFAULT_POLICY = "ajkoder/g1-pickup-ball-act"
 DEFAULT_CLAMP = 0.002
 DEFAULT_CAMERA = "zmq://192.168.123.164:55555"
+_LOCAL_VLA_MODULE = "local_vla_inference_main"
+
+
+def _load_local_vla_main():
+    """Load ACT runner under a unique module name (avoids shadowing this package's main)."""
+    if str(LOCAL_VLA_DIR) not in sys.path:
+        sys.path.insert(0, str(LOCAL_VLA_DIR))
+    if _LOCAL_VLA_MODULE in sys.modules:
+        return sys.modules[_LOCAL_VLA_MODULE]
+    spec = importlib.util.spec_from_file_location(_LOCAL_VLA_MODULE, LOCAL_VLA_DIR / "main.py")
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load ACT runner from {LOCAL_VLA_DIR / 'main.py'}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_LOCAL_VLA_MODULE] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def run_pickup_policy(cfg: OrchestratorConfig) -> None:
@@ -43,9 +60,7 @@ def run_pickup_policy(cfg: OrchestratorConfig) -> None:
     if cfg.backend is not PickupBackend.LOCAL:
         raise AssertionError(f"unknown backend: {cfg.backend}")
 
-    if str(LOCAL_VLA_DIR) not in sys.path:
-        sys.path.insert(0, str(LOCAL_VLA_DIR))
-    import main as local_vla  # type: ignore[import-not-found]
+    local_vla = _load_local_vla_main()
 
     # Optional extras: --policy / --clamp / --camera forwarded after '--'.
     policy = DEFAULT_POLICY

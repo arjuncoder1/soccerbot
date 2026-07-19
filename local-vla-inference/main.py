@@ -307,12 +307,9 @@ def image_no_motors(
     device,
 ) -> None:
     """Real camera + read-only lowstate → print predicted trajectory. Never write motors."""
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from dds_init import ensure_dds
 
-    if args.iface:
-        ChannelFactoryInitialize(0, args.iface)
-    else:
-        ChannelFactoryInitialize(0)
+    ensure_dds(args.iface)
 
     arms = G1Arms(kp=args.kp, kd=args.kd)
     front = make_front_camera(args.camera)
@@ -341,8 +338,11 @@ def image_no_motors(
 
 def _graceful_interrupt(arms: G1Arms, iface: str | None, front) -> None:
     """Ctrl+C: stop loco velocity and hand arms back to the balancer."""
+    from dds_init import ensure_dds
+
     logger.warning("Ctrl+C — graceful reset (StopMove + release arm_sdk)")
     try:
+        ensure_dds(iface)
         from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
         loco = LocoClient()
@@ -354,6 +354,7 @@ def _graceful_interrupt(arms: G1Arms, iface: str | None, front) -> None:
         logger.warning("StopMove during interrupt failed: %s", exc)
     try:
         arms.release()
+        arms.detach()
     except Exception as exc:  # noqa: BLE001
         logger.warning("arm release during interrupt failed: %s", exc)
     try:
@@ -407,12 +408,9 @@ def run(args: argparse.Namespace) -> None:
         return
 
     # One DDS init per process; shared by arms + camera clients.
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from dds_init import ensure_dds
 
-    if args.iface:
-        ChannelFactoryInitialize(0, args.iface)
-    else:
-        ChannelFactoryInitialize(0)
+    ensure_dds(args.iface)
 
     arms = G1Arms(kp=args.kp, kd=args.kd)
     front = make_front_camera(args.camera)
@@ -569,12 +567,16 @@ def run(args: argparse.Namespace) -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("camera disconnect failed: %s", exc)
             if leave_engaged:
-                # Hold last pose with arm_sdk still on for the next scripted stage.
+                # Hold last pose, then drop local DDS handles so the next
+                # in-process stage can own rt/arm_sdk without a second publisher.
                 try:
                     arms.freeze(cmd_q)
-                    logger.info("Clean exit: arm_sdk left engaged for next stage")
+                    arms.detach()
+                    logger.info(
+                        "Clean exit: arm_sdk left engaged; local publisher detached for next stage"
+                    )
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("leave-engaged freeze failed: %s", exc)
+                    logger.warning("leave-engaged freeze/detach failed: %s", exc)
             else:
                 arms.disconnect()
         logger.info("Done (interrupted=%s leave_engaged=%s)", interrupted, leave_engaged)

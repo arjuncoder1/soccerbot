@@ -252,8 +252,19 @@ class G1Arms:
         except Exception as e:
             logger.warning("Failed to release arm_sdk cleanly: %s", e)
 
+    def detach(self) -> None:
+        """Drop local DDS handles without changing arm_sdk weight.
+
+        Use after ``freeze()`` when handing control to the next in-process stage
+        so only one ``rt/arm_sdk`` publisher is alive at a time. The robot keeps
+        the last commanded pose (weight stays 1) until another publisher takes over
+        or ``release()`` ramps weight to 0.
+        """
+        self._publisher = None
+        self._subscriber = None
+        logger.info("G1Arms detached (local DDS handles dropped; arm_sdk weight unchanged)")
+
     def disconnect(self) -> None:
         if not self._state_only:
             self.release()
-        self._publisher = None
-        self._subscriber = None
+        self.detach()

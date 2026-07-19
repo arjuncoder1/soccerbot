@@ -21,6 +21,7 @@ py-modules = [
     "g1_arms",
     "front_camera",
     "telemetry",
+    "dds_init",
     "embodiment_g1_14d",
     "embodiment_g1d_16d",
     "diag_health",
