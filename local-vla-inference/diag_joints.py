@@ -1,17 +1,19 @@
-"""Log G1 arm joint positions and say which joints are MOVING (read-only).
+"""Log G1 arm + torso joint positions and say which are MOVING (read-only).
 
 Same DDS infra as main.py: subscribes ``rt/lowstate``. Instead of a wall of
 noisy numbers, each line reports joints whose position changed more than
 ``--threshold`` radians since the last sample:
 
-    [11:42:01] MOVING  LeftElbow(+0.152)  RightShoulderPitch(-0.081)
+    [11:42:01] MOVING  LeftElbow(+0.152)  WaistYaw(-0.081)
     [11:42:02] still
 
 Use ``--raw`` for the full numeric table. ``--csv`` always logs raw values.
+``--torso-only`` skips the 14 arm joints.
 
 Usage:
 
     ./local-vla-inference/run.sh diag_joints.py --iface enp5s0
+    ./local-vla-inference/run.sh diag_joints.py --iface enp5s0 --torso-only
     ./local-vla-inference/run.sh diag_joints.py --iface enp5s0 --csv joints.csv --fps 30
 """
 
@@ -23,11 +25,11 @@ import sys
 import threading
 import time
 
-from g1_arms import ARM_JOINT_INDEX
+from g1_arms import ARM_JOINT_INDEX, TORSO_JOINT_INDEX
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Read-only G1 arm joint motion logger (rt/lowstate).")
+    p = argparse.ArgumentParser(description="Read-only G1 arm+torso joint motion logger (rt/lowstate).")
     p.add_argument("--iface", default=None, help="Network interface on the robot's network (e.g. enp5s0).")
     p.add_argument("--fps", type=float, default=2.0, help="Print/log rate in Hz (default 2).")
     p.add_argument("--duration", type=float, default=0.0, help="Seconds to run (0 = until Ctrl+C).")
@@ -39,6 +41,7 @@ def parse_args() -> argparse.Namespace:
         help="Radians of change since last sample to count as moving (default 0.01).",
     )
     p.add_argument("--raw", action="store_true", help="Print the full numeric table instead of motion summary.")
+    p.add_argument("--torso-only", action="store_true", help="Log only waist yaw/roll/pitch (skip arms).")
     return p.parse_args()
 
 
@@ -69,7 +72,8 @@ def main() -> None:
     if not first.wait(timeout=10.0):
         sys.exit("No rt/lowstate within 10s — check --iface and robot network.")
 
-    names = list(ARM_JOINT_INDEX)
+    joints = dict(TORSO_JOINT_INDEX) if args.torso_only else {**TORSO_JOINT_INDEX, **ARM_JOINT_INDEX}
+    names = list(joints)
     short_names = [n.removeprefix("k") for n in names]
     writer = None
     csv_file = None
@@ -89,7 +93,7 @@ def main() -> None:
                 break
             with lock:
                 msg = latest["msg"]
-            q = [float(msg.motor_state[idx].q) for idx in ARM_JOINT_INDEX.values()]
+            q = [float(msg.motor_state[idx].q) for idx in joints.values()]
 
             if args.raw:
                 if row_count % 20 == 0:

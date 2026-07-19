@@ -37,8 +37,8 @@ ARM_JOINT_INDEX: dict[str, int] = {
 
 WEIGHT_JOINT = 29  # kNotUsedJoint: q = 1 enables arm_sdk, 0 releases it
 
-# Legs + waist (read-only here; never commanded). Used for diagnosis logging
-# to see the balance controller react (e.g. sidestepping).
+# Legs + waist yaw (read-only here; never commanded). Used for diagnosis
+# logging to see the balance controller react (e.g. sidestepping).
 LEG_JOINT_INDEX: dict[str, int] = {
     "kLeftHipPitch": 0,
     "kLeftHipRoll": 1,
@@ -53,6 +53,13 @@ LEG_JOINT_INDEX: dict[str, int] = {
     "kRightAnklePitch": 10,
     "kRightAnkleRoll": 11,
     "kWaistYaw": 12,
+}
+
+# Full torso (waist) — yaw is also in LEG_JOINT_INDEX for balance logs.
+TORSO_JOINT_INDEX: dict[str, int] = {
+    "kWaistYaw": 12,
+    "kWaistRoll": 13,
+    "kWaistPitch": 14,
 }
 
 
