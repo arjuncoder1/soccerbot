@@ -66,7 +66,8 @@ def release_arms(arms: Any | None = None, *, iface: str | None = None) -> None:
             _ensure_front(LOCAL_VLA_DIR)
             from g1_arms import G1Arms
 
-            arms = G1Arms(kp=60.0, kd=1.5)
+            # Short state timeout: never stall a safety path waiting on lowstate.
+            arms = G1Arms(kp=60.0, kd=1.5, state_timeout_s=3.0)
             arms.connect()
             owned = True
         except Exception as exc:  # noqa: BLE001
@@ -115,30 +116,35 @@ def graceful_reset(
 
 
 def enter_damp(*, iface: str | None = None, loco: Any | None = None) -> None:
-    """Passive damp mode (pendant L2+B). Soft-falls the robot if unsupported."""
+    """Passive damp mode (pendant L2+B). Soft-falls the robot if unsupported.
+
+    Emergency ordering: the FSM change happens FIRST (immediate), then arm_sdk
+    cleanup best-effort — never block the emergency on an arm connect/ramp.
+    """
     client = loco or init_loco(iface)
-    stop_loco(client)
     try:
-        # Best-effort: release arm overlay before going passive.
-        release_arms(iface=iface)
         rc = client.Damp()
         logger.warning("LocoClient.Damp() -> %s  (passive damping)", rc)
     except Exception as exc:  # noqa: BLE001
         logger.error("Damp failed: %s", exc)
         raise
+    # In Damp the firmware ignores arm_sdk anyway; this just tidies our overlay.
+    release_arms(iface=iface)
 
 
 def enter_zero_torque(*, iface: str | None = None, loco: Any | None = None) -> None:
-    """Zero-torque mode (pendant L2+A). Robot goes fully limp — spotter ready."""
+    """Zero-torque mode (pendant L2+A). Robot goes fully limp — spotter ready.
+
+    Emergency ordering: ZeroTorque FIRST, arm cleanup after (best-effort).
+    """
     client = loco or init_loco(iface)
-    stop_loco(client)
     try:
-        release_arms(iface=iface)
         rc = client.ZeroTorque()
         logger.warning("LocoClient.ZeroTorque() -> %s  (motors limp)", rc)
     except Exception as exc:  # noqa: BLE001
         logger.error("ZeroTorque failed: %s", exc)
         raise
+    release_arms(iface=iface)
 
 
 def balance_stand(*, iface: str | None = None, loco: Any | None = None) -> None:

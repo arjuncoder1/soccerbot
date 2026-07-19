@@ -46,9 +46,8 @@ ARM_JOINTS: tuple[str, ...] = (
 DEFAULT_HOME_Q: dict[str, float] = {f"{name}.q": 0.0 for name in ARM_JOINTS}
 
 DEFAULT_HOME_JSON = REPO_ROOT / "scripted-behavior" / "home_pose.json"
-HOME_SLEW_CLAMP = 0.02  # rad/step
+HOME_SLEW_CLAMP = 0.02  # rad/step (@50 Hz → max 1 rad/s per joint)
 HOME_CONTROL_DT = 0.02
-HOME_ENGAGE_RAMP_S = 1.0
 
 
 def load_home_pose(path: Path | None = None) -> dict[str, float]:
@@ -98,17 +97,31 @@ def go_home(
     _ensure_front(LOCAL_VLA_DIR)
     from g1_arms import G1Arms
 
+    from g1_arms import ARM_JOINT_LIMITS
+
     target = pose if pose is not None else load_home_pose(pose_path)
     missing = [k for k in DEFAULT_HOME_Q if k not in target]
     if missing:
         raise ValueError(f"home pose missing joints: {missing}")
+    # Refuse out-of-limit custom poses up front (send_arm_positions would clamp
+    # them anyway, but a bad home_pose.json should fail loudly, not silently).
+    for name, (lo, hi) in ARM_JOINT_LIMITS.items():
+        q = float(target[f"{name}.q"])
+        if not (lo <= q <= hi):
+            raise ValueError(
+                f"home pose joint {name}={q:.3f} outside URDF limits [{lo:.3f}, {hi:.3f}]"
+            )
 
     arms = G1Arms(kp=60.0, kd=1.5)
     arms.connect()
     try:
         start = arms.get_arm_positions()
-        # Engage without yanking: ramp weight while holding current pose.
-        arms.hold_current_pose(ramp_s=HOME_ENGAGE_RAMP_S)
+        # Engage without the 0->1 weight ramp: if arm_sdk is already engaged
+        # (e.g. mid-demo), ramping from 0 hands the arms back to the balancer
+        # for ~0.5s and causes a visible jerk (see HANDOVER §5). A single
+        # weight=1 publish is a no-op when engaged and an instant
+        # engage-at-current-pose otherwise.
+        arms.send_arm_positions(start, weight=1.0)
 
         # Estimate duration from max joint delta if not provided.
         if duration_s is None:

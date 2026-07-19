@@ -126,6 +126,10 @@ def run_cli(iface: str | None, action: str | None = None) -> int:
             confirm = input("Enter ZeroTorque (limp)? Spotter ready? [y/N] ").strip().lower()
             if confirm not in ("y", "yes"):
                 continue
+        if cmd == "home":
+            confirm = input("Move arms to home pose (slew-clamped)? [y/N] ").strip().lower()
+            if confirm not in ("y", "yes"):
+                continue
         try:
             if loco is None:
                 loco = init_loco(iface)

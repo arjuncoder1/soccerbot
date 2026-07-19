@@ -191,11 +191,13 @@ def _interpolate_to(
     duration_s: float,
     control_dt: float = 0.02,
     slew_clamp: float = THROW_SLEW_CLAMP,
-) -> None:
+) -> dict[str, float]:
     """Linearly interpolate the 14 arm joints from ``start`` to ``target``.
 
     Each tick is also slew-rate limited so a short ``duration_s`` cannot command
-    an unsafe jump even if the start/target gap is large.
+    an unsafe jump even if the start/target gap is large. Returns the FINAL
+    commanded pose — callers must chain it as the next phase's start so the
+    command trajectory has no discontinuity when the clamp lagged the blend.
     """
     num_steps = max(1, int(duration_s / control_dt))
     cmd = dict(start)
@@ -210,11 +212,12 @@ def _interpolate_to(
                     delta = slew_clamp if delta > 0 else -slew_clamp
                 cmd[key] = cmd[key] + delta
         else:
-            cmd = desired
+            cmd = dict(desired)
         arms.send_arm_positions(cmd)
         elapsed = time.time() - step_start
         sleep_s = max(0.0, control_dt - elapsed)
         time.sleep(sleep_s)
+    return cmd
 
 
 def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
@@ -238,14 +241,17 @@ def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
         lo, hi = (-1.6144, 1.6144)
         follow_through_pose[key] = max(lo, min(hi, release_pose[key] + _FOLLOW_THROUGH_EXTRA_WRIST_PITCH))
 
+    # Chain each phase from the ACTUAL last commanded pose (the slew clamp can
+    # lag the blend); starting the next phase from the nominal waypoint would
+    # step-jump the position target by the accumulated lag.
     logger.info("-> release (%.2fs)", RELEASE_DURATION_S)
-    _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S, slew_clamp=slew_clamp)
+    cmd = _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S, slew_clamp=slew_clamp)
     logger.info("-> follow_through (%.2fs)", FOLLOW_THROUGH_DURATION_S)
-    _interpolate_to(
-        arms, release_pose, follow_through_pose, FOLLOW_THROUGH_DURATION_S, slew_clamp=slew_clamp
+    cmd = _interpolate_to(
+        arms, cmd, follow_through_pose, FOLLOW_THROUGH_DURATION_S, slew_clamp=slew_clamp
     )
     logger.info("-> recover (%.2fs)", RECOVER_DURATION_S)
-    _interpolate_to(arms, follow_through_pose, start_pose, RECOVER_DURATION_S, slew_clamp=slew_clamp)
+    _interpolate_to(arms, cmd, start_pose, RECOVER_DURATION_S, slew_clamp=slew_clamp)
     logger.info("Push complete.")
 
 

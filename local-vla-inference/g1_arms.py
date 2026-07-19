@@ -37,6 +37,26 @@ ARM_JOINT_INDEX: dict[str, int] = {
 
 WEIGHT_JOINT = 29  # kNotUsedJoint: q = 1 enables arm_sdk, 0 releases it
 
+# Arm joint limits (rad) from the Unitree g1_description 29-DoF URDF.
+# Enforced as an absolute position clamp in send_arm_positions() — the single
+# choke point every arm command path goes through (ACT, replay, throw, home).
+ARM_JOINT_LIMITS: dict[str, tuple[float, float]] = {
+    "kLeftShoulderPitch": (-3.0892, 2.6704),
+    "kLeftShoulderRoll": (-1.5882, 2.2515),
+    "kLeftShoulderYaw": (-2.618, 2.618),
+    "kLeftElbow": (-1.0472, 2.0944),
+    "kLeftWristRoll": (-1.9722, 1.9722),
+    "kLeftWristPitch": (-1.6144, 1.6144),
+    "kLeftWristYaw": (-1.6144, 1.6144),
+    "kRightShoulderPitch": (-3.0892, 2.6704),
+    "kRightShoulderRoll": (-2.2515, 1.5882),
+    "kRightShoulderYaw": (-2.618, 2.618),
+    "kRightElbow": (-1.0472, 2.0944),
+    "kRightWristRoll": (-1.9722, 1.9722),
+    "kRightWristPitch": (-1.6144, 1.6144),
+    "kRightWristYaw": (-1.6144, 1.6144),
+}
+
 # Legs + waist yaw (read-only here; never commanded). Used for diagnosis
 # logging to see the balance controller react (e.g. sidestepping).
 LEG_JOINT_INDEX: dict[str, int] = {
@@ -160,20 +180,38 @@ class G1Arms:
         return snap
 
     def send_arm_positions(self, action: dict[str, float], weight: float = 1.0) -> None:
-        """Publish arm joint targets. ``action`` keys are '<joint_name>.q'."""
+        """Publish arm joint targets. ``action`` keys are '<joint_name>.q'.
+
+        Every commanded position is hard-clamped to the real URDF joint limits
+        (``ARM_JOINT_LIMITS``) — last line of defense regardless of which caller
+        (policy, replay, throw, home) produced the target.
+        """
         if self._publisher is None:
             raise RuntimeError("arm_sdk publisher not available (connected state_only)")
         cmd = self._cmd
         cmd.motor_cmd[WEIGHT_JOINT].q = float(np.clip(weight, 0.0, 1.0))
+        limit_hits = 0
         for name, idx in ARM_JOINT_INDEX.items():
             key = f"{name}.q"
             if key not in action:
                 continue
-            cmd.motor_cmd[idx].q = float(action[key])
+            q = float(action[key])
+            lo, hi = ARM_JOINT_LIMITS[name]
+            q_clamped = min(hi, max(lo, q))
+            if q_clamped != q:
+                limit_hits += 1
+            cmd.motor_cmd[idx].q = q_clamped
             cmd.motor_cmd[idx].dq = 0.0
             cmd.motor_cmd[idx].tau = 0.0
             cmd.motor_cmd[idx].kp = self.kp
             cmd.motor_cmd[idx].kd = self.kd
+        if limit_hits:
+            now = time.monotonic()
+            if now - getattr(self, "_last_limit_warn", 0.0) > 1.0:
+                self._last_limit_warn = now
+                logger.warning(
+                    "send_arm_positions: %d joint target(s) clamped to URDF limits", limit_hits
+                )
         # arm_sdk controls waist joints (12-14) in addition to arm joints (15-28)
         # per the official g1_arm7_sdk_dds_example. Always hold them at the current
         # measured position with full stiffness so they don't go limp when arm_sdk

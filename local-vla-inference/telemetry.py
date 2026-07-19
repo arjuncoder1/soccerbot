@@ -108,19 +108,26 @@ class Telemetry:
     ) -> None:
         if self._rr is None:
             return
-        self.set_time(step=step, seconds=elapsed_s)
-        if rgb is not None:
-            self.log_image(f"{stage}/camera/rgb", rgb)
-        if depth is not None:
-            self.log_image(f"{stage}/camera/depth", depth, compress=False)
-        if measured:
-            self.log_scalars(f"{stage}/arm/measured", _strip_q_suffix(measured))
-        if target:
-            self.log_scalars(f"{stage}/arm/target", _strip_q_suffix(target))
-        if commanded:
-            self.log_scalars(f"{stage}/arm/commanded", _strip_q_suffix(commanded))
-        if extras:
-            self.log_scalars(f"{stage}/stats", extras)
+        # Telemetry must NEVER break the control loop: any viz failure just
+        # disables further logging for this session.
+        try:
+            self.set_time(step=step, seconds=elapsed_s)
+            if rgb is not None:
+                self.log_image(f"{stage}/camera/rgb", rgb)
+            if depth is not None:
+                self.log_image(f"{stage}/camera/depth", depth, compress=False)
+            if measured:
+                self.log_scalars(f"{stage}/arm/measured", _strip_q_suffix(measured))
+            if target:
+                self.log_scalars(f"{stage}/arm/target", _strip_q_suffix(target))
+            if commanded:
+                self.log_scalars(f"{stage}/arm/commanded", _strip_q_suffix(commanded))
+            if extras:
+                self.log_scalars(f"{stage}/stats", extras)
+        except Exception as exc:  # noqa: BLE001 -- viz must not affect control
+            logger.warning("Rerun log_step failed (%s); disabling telemetry", exc)
+            self._rr = None
+            self.enabled = False
 
     def log_detection(
         self,
@@ -134,13 +141,18 @@ class Telemetry:
     ) -> None:
         if self._rr is None:
             return
-        self.set_time(step=step, seconds=elapsed_s)
-        if rgb is not None:
-            self.log_image(f"{stage}/camera/rgb", rgb)
-        extras: dict[str, float] = {"n_people": float(n_people)}
-        if nearest_m is not None:
-            extras["nearest_m"] = float(nearest_m)
-        self.log_scalars(f"{stage}/detect", extras)
+        try:
+            self.set_time(step=step, seconds=elapsed_s)
+            if rgb is not None:
+                self.log_image(f"{stage}/camera/rgb", rgb)
+            extras: dict[str, float] = {"n_people": float(n_people)}
+            if nearest_m is not None:
+                extras["nearest_m"] = float(nearest_m)
+            self.log_scalars(f"{stage}/detect", extras)
+        except Exception as exc:  # noqa: BLE001 -- viz must not affect control
+            logger.warning("Rerun log_detection failed (%s); disabling telemetry", exc)
+            self._rr = None
+            self.enabled = False
 
 
 def _strip_q_suffix(joints: dict[str, float]) -> dict[str, float]:
