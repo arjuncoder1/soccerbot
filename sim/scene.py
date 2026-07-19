@@ -48,9 +48,9 @@ def build_scene():
     """
     ensure_sim_app()
 
-    from isaacsim.core import World
-    from isaacsim.core.objects import DynamicSphere
-    from isaacsim.core.utils.stage_utils import add_reference_to_stage
+    from isaacsim.core.api import World
+    from isaacsim.core.api.objects import DynamicSphere
+    from isaacsim.core.api.utils.stage_utils import add_reference_to_stage
 
     world = World(stage_units_in_meters=1.0)
     world.scene.add_default_ground_plane()
@@ -58,7 +58,7 @@ def build_scene():
     # G1 robot
     robot_prim_path = "/World/G1"
     add_reference_to_stage(usd_path=G1_USD, prim_path=robot_prim_path)
-    from isaacsim.core.articulations import Articulation
+    from isaacsim.core.api.articulations import Articulation
 
     robot = world.scene.add(
         Articulation(prim_path=robot_prim_path, name="g1", position=G1_POSITION)
@@ -67,7 +67,7 @@ def build_scene():
     # Table
     table_prim_path = "/World/Table"
     add_reference_to_stage(usd_path=TABLE_USD, prim_path=table_prim_path)
-    from isaacsim.core.prims import XFormPrim
+    from isaacsim.core.api.prims import XFormPrim
 
     world.scene.add(
         XFormPrim(prim_path=table_prim_path, name="table", position=TABLE_POSITION)
