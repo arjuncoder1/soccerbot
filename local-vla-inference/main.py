@@ -22,6 +22,7 @@ import argparse
 import csv
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -39,6 +40,41 @@ from front_camera import make_front_camera
 from g1_arms import G1Arms
 
 logger = logging.getLogger(__name__)
+
+_LOCAL_POLICY_MARKERS = ("/", "./", "../", "~")
+_REQUIRED_POLICY_FILES = ("config.json", "model.safetensors")
+
+
+def resolve_policy_ref(policy: str) -> str:
+    """Return a Hub repo id, or an absolute local checkpoint directory.
+
+    Absolute/relative filesystem paths must exist as a LeRobot ``pretrained_model``
+    dir. Otherwise ``from_pretrained`` falls through to the Hub and raises
+    ``HFValidationError`` on paths like ``/home/.../pretrained_model``.
+    """
+    expanded = Path(policy).expanduser()
+    looks_local = (
+        policy.startswith(_LOCAL_POLICY_MARKERS)
+        or expanded.exists()
+        or policy.count("/") > 1  # Hub ids are at most namespace/name
+    )
+    if not looks_local:
+        return policy
+
+    path = expanded.resolve()
+    if not path.is_dir():
+        raise FileNotFoundError(
+            f"Local policy path is not a directory: {path}\n"
+            "Point --policy at the LeRobot checkpoint folder that contains "
+            "config.json and model.safetensors (usually .../pretrained_model)."
+        )
+    missing = [name for name in _REQUIRED_POLICY_FILES if not (path / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"Incomplete checkpoint at {path}; missing: {', '.join(missing)}\n"
+            f"Contents: {sorted(p.name for p in path.iterdir())}"
+        )
+    return str(path)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -139,15 +175,16 @@ def run(args: argparse.Namespace) -> None:
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
     device = resolve_device(args.device)
-    logger.info("Loading ACT policy %s on %s", args.policy, device)
+    policy_ref = resolve_policy_ref(args.policy)
+    logger.info("Loading ACT policy %s on %s", policy_ref, device)
 
-    policy = ACTPolicy.from_pretrained(args.policy)
+    policy = ACTPolicy.from_pretrained(policy_ref)
     policy.to(device)
     policy.eval()
 
     preprocess, postprocess = make_pre_post_processors(
         policy.config,
-        pretrained_path=args.policy,
+        pretrained_path=policy_ref,
     )
     features = dataset_features()
 
