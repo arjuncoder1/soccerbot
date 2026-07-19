@@ -43,8 +43,8 @@ logger = logging.getLogger("scripted_behavior.arm_replay")
 # Smooth blend from current measured pose to frames[0] over this many seconds.
 REPLAY_RAMP_S = 2.0
 # Max radians any single joint may move per replay frame. At 30 fps this is
-# 0.05 rad * 30 = 1.5 rad/s which is already quite fast; safety net only.
-REPLAY_SLEW_CLAMP = 0.05
+# 0.01 rad * 30 = 0.3 rad/s — calm safety net (spikes / bad frames only).
+REPLAY_SLEW_CLAMP = 0.01
 
 
 def _import_g1_arms():

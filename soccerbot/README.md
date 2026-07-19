@@ -40,9 +40,10 @@ Defaults match the validated local ACT command:
 - **URDF hard limit clamp at the choke point**: `G1Arms.send_arm_positions` clamps
   every commanded joint to the real G1 URDF limits — applies to ALL callers
   (ACT, replay, arm holds, throw, go-home) regardless of what they compute.
-- Every arm command path is additionally slew-clamped (ACT 0.002 rad/step +
-  replay + throw + go-home), and throw phases chain from the actual last
-  command so the clamp can never cause a position step-jump.
+- Every arm command path is additionally slew-clamped: ACT / go-home **0.002**
+  rad/step (recovery stays as calm as inference), replay **0.01**, throw
+  **0.06** (loose so the push keeps dynamics). Throw phases chain from the
+  actual last command so the clamp can never cause a position step-jump.
 - **Ctrl+C** → graceful reset: `LocoClient.StopMove()` + release `arm_sdk`
   (opens a short-timeout temp publisher if the interrupted stage held none).
 - **`./killswitch.sh`** → CLI (default) or `--gui`: Stop / Go Home / Damp /

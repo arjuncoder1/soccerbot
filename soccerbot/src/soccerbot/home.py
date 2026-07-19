@@ -46,8 +46,11 @@ ARM_JOINTS: tuple[str, ...] = (
 DEFAULT_HOME_Q: dict[str, float] = {f"{name}.q": 0.0 for name in ARM_JOINTS}
 
 DEFAULT_HOME_JSON = REPO_ROOT / "scripted-behavior" / "home_pose.json"
-HOME_SLEW_CLAMP = 0.02  # rad/step (@50 Hz → max 1 rad/s per joint)
+# Match ACT's cautious rate: home/reset is recovery, not a performance move.
+# At 50 Hz this is ~0.1 rad/s per joint — slow on purpose after jerky resets.
+HOME_SLEW_CLAMP = 0.002  # rad/step
 HOME_CONTROL_DT = 0.02
+HOME_MAX_DURATION_S = 90.0  # allow full travel under the tight slew cap
 
 
 def load_home_pose(path: Path | None = None) -> dict[str, float]:
@@ -124,12 +127,19 @@ def go_home(
         arms.send_arm_positions(start, weight=1.0)
 
         # Estimate duration from max joint delta if not provided.
+        # Must not truncate below steps_needed or the slew clamp never reaches home.
         if duration_s is None:
             max_delta = max(abs(target[k] - start.get(k, 0.0)) for k in DEFAULT_HOME_Q)
-            # At slew_clamp rad/step and HOME_CONTROL_DT, need enough steps.
             steps_needed = max(1, int(max_delta / max(slew_clamp, 1e-6)) + 1)
-            duration_s = steps_needed * HOME_CONTROL_DT
-            duration_s = max(2.0, min(duration_s, 20.0))
+            duration_s = max(2.0, steps_needed * HOME_CONTROL_DT)
+            if duration_s > HOME_MAX_DURATION_S:
+                logger.warning(
+                    "Home travel needs %.1fs at slew=%.3f; capping at %.1fs",
+                    duration_s,
+                    slew_clamp,
+                    HOME_MAX_DURATION_S,
+                )
+                duration_s = HOME_MAX_DURATION_S
 
         logger.info(
             "Going home over %.1fs (slew=%.3f rad/step, release_after=%s)",
