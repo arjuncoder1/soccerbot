@@ -1,0 +1,10 @@
+[project]
+name = "soccerbot-sim"
+version = "0.1.0"
+description = "Isaac Sim integration for scripted-behavior demo"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -17,23 +17,39 @@ from __future__ import annotations
 
 import logging
 
-from config import OrchestratorConfig
+from pathlib import Path
+
+from config import REPO_ROOT, OrchestratorConfig
 
 logger = logging.getLogger("scripted_behavior.throw")
 
 THROW_MAX_S = 6.0
 THROW_CONTROL_HZ = 30.0
 
+THROW_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "throw.json"
+
 
 def throw_ball(cfg: OrchestratorConfig) -> None:
-    raise NotImplementedError(
-        "throw_ball: hardcoded throw trajectory not recorded yet"
+    if not THROW_TRAJECTORY.exists():
+        raise FileNotFoundError(
+            f"Throw trajectory not recorded yet. Record one by backdriving "
+            f"the arms while running local-vla-inference/diag_state.py, then "
+            f"save as {THROW_TRAJECTORY}"
+        )
+    from arm_replay import replay_arm_trajectory
+
+    logger.info("Replaying throw trajectory: %s", THROW_TRAJECTORY)
+    replay_arm_trajectory(
+        THROW_TRAJECTORY,
+        iface=cfg.iface,
+        max_duration_s=THROW_MAX_S,
     )
+    logger.info("Throw complete")
 
 
 # ---------------------------------------------------------------------------
 # Standalone entry point: run just this stage.
-#   python3 throw.py --iface eth0            (currently NotImplementedError)
+#   python3 throw.py --iface eth0            (requires trajectories/throw.json)
 # ---------------------------------------------------------------------------
 
 

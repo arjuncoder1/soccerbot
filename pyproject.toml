@@ -15,6 +15,7 @@ members = [
     "local-vla-inference",
     "scripted-behavior",
     "remote-vla-inference",
+    "sim",
 ]
 
 [tool.uv]
