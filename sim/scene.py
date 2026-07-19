@@ -29,7 +29,7 @@ BALL_RADIUS = 0.04  # soccer ball ~8 cm diameter
 _simulation_app = None
 
 
-def ensure_sim_app(headless: bool = True):
+def ensure_sim_app(headless: bool = False):
     """Instantiate SimulationApp exactly once (must happen before other imports)."""
     global _simulation_app
     if _simulation_app is not None:
@@ -102,4 +102,12 @@ def discover_joint_names():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    discover_joint_names()
+    dof_names = discover_joint_names()
+    print("\nScene is live — view at your Isaac Sim browser viewer.")
+    print("Press Ctrl+C to shut down.\n")
+    try:
+        while _simulation_app.is_running():
+            _simulation_app.update()
+    except KeyboardInterrupt:
+        pass
+    _simulation_app.close()
