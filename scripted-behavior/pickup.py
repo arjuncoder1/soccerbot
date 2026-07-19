@@ -110,7 +110,8 @@ def run_pickup_policy(cfg: OrchestratorConfig) -> None:
         clamp,
         camera,
     )
-    local_vla.run(args)
+    # Reuse shared Telemetry when soccerbot (or another caller) set cfg.telemetry.
+    local_vla.run(args, telemetry=getattr(cfg, "telemetry", None))
     logger.info("Pickup policy finished cleanly")
 
 

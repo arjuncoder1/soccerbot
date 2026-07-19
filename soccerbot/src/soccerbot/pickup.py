@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from soccerbot.config import OrchestratorConfig, PickupBackend
 from soccerbot.deps import ensure_logic_imports, import_local_vla_main
@@ -10,7 +11,7 @@ from soccerbot.deps import ensure_logic_imports, import_local_vla_main
 logger = logging.getLogger("soccerbot.pickup")
 
 
-def run_pickup(cfg: OrchestratorConfig) -> None:
+def run_pickup(cfg: OrchestratorConfig, telemetry: Any | None = None) -> None:
     ensure_logic_imports()
 
     if cfg.backend is PickupBackend.REPLAY:
@@ -49,6 +50,8 @@ def run_pickup(cfg: OrchestratorConfig) -> None:
         fps=cfg.fps,
         device=cfg.device,
         rerun=cfg.rerun,
+        record_path=cfg.record_path,
+        display=cfg.display,
         leave_arms_engaged=True,
     )
     logger.info(
@@ -59,5 +62,7 @@ def run_pickup(cfg: OrchestratorConfig) -> None:
         cfg.camera,
         cfg.pickup_duration_s,
     )
-    local_vla.run(args)
+    # Share orchestrator Telemetry so --record-path covers pickup + stages 2-4
+    # and ACT does not rr.init/shutdown_rerun on top of the FileSink.
+    local_vla.run(args, telemetry=telemetry)
     logger.info("ACT pickup finished cleanly")

@@ -140,6 +140,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Disable Rerun even if the caller defaulted it on.",
     )
     p.add_argument(
+        "--record-path",
+        default=None,
+        metavar="PATH",
+        help="Also/instead write this ACT session to an .rrd file (FileSink). "
+        "Use with --no-display for headless robot PCs (e.g. Waldo).",
+    )
+    p.add_argument(
+        "--no-display",
+        action="store_true",
+        help="With --record-path: write to disk only; do not spawn a live viewer.",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Load policy and print one fake forward pass; do not connect hardware.",
@@ -171,6 +183,8 @@ def build_args(
     fps: float = 30.0,
     device: str | None = None,
     rerun: bool = True,
+    record_path: str | None = None,
+    display: bool = True,
     leave_arms_engaged: bool = True,
     dry_run: bool = False,
     image_no_motors: bool = False,
@@ -190,6 +204,8 @@ def build_args(
         device=device,
         rerun=rerun,
         no_rerun=not rerun,
+        record_path=record_path,
+        no_display=not display,
         dry_run=dry_run,
         image_no_motors=image_no_motors,
         leave_arms_engaged=leave_arms_engaged,
@@ -363,7 +379,13 @@ def _graceful_interrupt(arms: G1Arms, iface: str | None, front) -> None:
         logger.warning("camera disconnect during interrupt failed: %s", exc)
 
 
-def run(args: argparse.Namespace) -> None:
+def run(args: argparse.Namespace, telemetry: Any | None = None) -> None:
+    """Run ACT pickup.
+
+    If ``telemetry`` is passed (soccerbot orchestrator), reuse that session and
+    do **not** start/stop Rerun here — a second ``rr.init`` / ``shutdown_rerun``
+    was wiping ``--record-path`` FileSinks and killing stages 2–4 recording.
+    """
     import torch
     from lerobot.policies import make_pre_post_processors
     from lerobot.policies.act import ACTPolicy
@@ -421,9 +443,19 @@ def run(args: argparse.Namespace) -> None:
     # Engage arm_sdk smoothly at the current pose before the policy takes over.
     arms.hold_current_pose(ramp_s=2.0)
 
-    rerun_on = bool(getattr(args, "rerun", False)) and not bool(getattr(args, "no_rerun", False))
-    telemetry = Telemetry(enabled=rerun_on, session_name="soccerbot-act")
-    telemetry.start()
+    # Own a Telemetry session only when the orchestrator did not hand us one.
+    owns_telemetry = telemetry is None
+    if owns_telemetry:
+        rerun_on = bool(getattr(args, "rerun", False)) and not bool(
+            getattr(args, "no_rerun", False)
+        )
+        telemetry = Telemetry(
+            enabled=rerun_on,
+            session_name="soccerbot-act",
+            record_path=getattr(args, "record_path", None),
+            display=not bool(getattr(args, "no_display", False)),
+        )
+        telemetry.start()
 
     h, w, _ = layout.IMAGE_SHAPE
     dt = 1.0 / args.fps
@@ -560,7 +592,8 @@ def run(args: argparse.Namespace) -> None:
     finally:
         log_file.close()
         logger.info("Step log written to %s (%d steps)", log_path, step)
-        telemetry.stop()
+        if owns_telemetry:
+            telemetry.stop()
         if not interrupted:
             try:
                 front.disconnect()

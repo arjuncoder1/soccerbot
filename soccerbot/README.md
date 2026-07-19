@@ -24,6 +24,12 @@ in sibling packages that soccerbot imports in-process:
 
 # safer smoke: replay recorded pickup trajectory instead of ACT
 ./run_soccerbot.sh --iface enp5s0 --backend replay
+
+# ACT policy + record full demo to .rrd (headless / Waldo)
+mkdir -p logs
+./run_soccerbot.sh --iface enp5s0 --backend local \
+  --record-path logs/demo.rrd --no-display
+# then: scp logs/demo.rrd … && rerun demo.rrd
 ```
 
 Defaults match the validated local ACT command:

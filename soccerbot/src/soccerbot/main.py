@@ -47,12 +47,9 @@ def run_demo(cfg: OrchestratorConfig) -> None:
     from throw import throw_ball
     from turn_180 import turn_180_degrees
 
-    # Shared Rerun session for stages 2-4 (turn/avoid/throw). Stage 1 (pickup)
-    # keeps its own separate, already-working "soccerbot-act" session started
-    # inside local-vla-inference/main.py's run() -- not touched here, so this
-    # doesn't risk anything in the tested ACT control loop. Side-channel only:
-    # every telemetry call reads state a stage already reads for its own
-    # control logic; cfg.rerun=False (--no-rerun) makes every method a no-op.
+    # One shared Rerun session for the whole demo (pickup + turn/avoid/throw).
+    # Passing it into ACT avoids a second rr.init / shutdown_rerun that used to
+    # wipe --record-path FileSinks. Side-channel only: cfg.rerun=False is a no-op.
     telemetry_mod = import_telemetry()
     telemetry = telemetry_mod.Telemetry(
         enabled=cfg.rerun,
@@ -75,7 +72,7 @@ def run_demo(cfg: OrchestratorConfig) -> None:
     try:
         telemetry.log_stage("STAGE 1/4: PICKUP (%s)" % cfg.backend.value)
         logger.info("=== Stage 1/4: PICKUP (%s) ===", cfg.backend.value)
-        run_pickup(cfg)
+        run_pickup(cfg, telemetry=telemetry)
 
         telemetry.log_stage("STAGE 2/4: TURN 180")
         logger.info("=== Stage 2/4: TURN 180 ===")
@@ -140,9 +137,8 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         "--record-path",
         default=None,
         metavar="PATH",
-        help="Also/instead write stages 2-4's (turn/avoid/throw) Rerun stream to this .rrd "
-        "file (e.g. logs/demo.rrd), for offline analysis with query_demo.py. Independent of "
-        "the pickup stage's own separate telemetry session.",
+        help="Write the full demo Rerun stream (pickup + turn/avoid/throw) to this .rrd "
+        "file (e.g. logs/demo.rrd), for offline analysis with query_demo.py.",
     )
     p.add_argument(
         "--no-display",

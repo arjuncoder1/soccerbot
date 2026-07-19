@@ -2,10 +2,10 @@
 never opens the Viewer, pulls the recording back out as pandas DataFrames and
 answers concrete questions about the run:
 
-  1. How long did each stage (turn_180 / avoid / throw) take?
+  1. How long did each stage (pickup / turn_180 / avoid / throw) take?
      (from the "stage" TextLog markers ``soccerbot.main.run_demo`` logs at
-     each transition -- pickup is a separate, earlier "soccerbot-act"
-     recording, not part of this one; see ``local-vla-inference/main.py``.)
+     each transition -- one shared ``soccerbot_demo`` recording when run via
+     ``python -m soccerbot --record-path ...``.)
   2. How accurate/stable was the turn_180 stage?
      (final ``turn/accumulated_deg`` vs. the 180 deg target -- the EXACT
      metric ``turn_180.py``'s own stopping condition uses, not a re-derived
