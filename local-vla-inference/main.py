@@ -157,7 +157,7 @@ def build_args(
     iface: str | None = None,
     camera: str = "zmq://192.168.123.164:55555",
     clamp: float = 0.002,
-    duration: float = 30.0,
+    duration: float = 45.0,
     fps: float = 30.0,
     device: str | None = None,
     leave_arms_engaged: bool = True,
