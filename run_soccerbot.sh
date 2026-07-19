@@ -28,7 +28,17 @@ export LD_LIBRARY_PATH="${CYCLONE_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PAT
 export PATH="$VENV_DIR/bin:$PATH"
 export PYTHONPATH="$REPO_ROOT/soccerbot/src${PYTHONPATH:+:$PYTHONPATH}"
 
+# Relative --record-path (e.g. logs/demo.rrd) must resolve from the repo root.
+cd "$REPO_ROOT"
+
 echo "tip: keep ./killswitch.sh running in another terminal" >&2
+
+if ! "$VENV_DIR/bin/python" -c "import rerun" >/dev/null 2>&1; then
+  echo "error: rerun-sdk missing in $VENV_DIR — .rrd recording will not work" >&2
+  echo "fix:  cd $REPO_ROOT && uv sync -p 3.12 --all-packages" >&2
+  echo "check: .venv/bin/python -c 'import rerun; print(rerun.__version__)'" >&2
+  # Still allow non-record runs; soccerbot raises if --record-path is set.
+fi
 
 if command -v soccerbot >/dev/null 2>&1; then
   exec soccerbot "$@"

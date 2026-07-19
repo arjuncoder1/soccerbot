@@ -138,7 +138,15 @@ class Telemetry:
                 self.display,
             )
             self._send_blueprint()
-        except Exception as exc:  # noqa: BLE001 -- viz is optional on the robot
+        except Exception as exc:  # noqa: BLE001 -- viz is optional unless recording
+            # --record-path must not silently no-op (Waldo hit this: no rerun-sdk installed).
+            if self.record_path:
+                raise RuntimeError(
+                    f"Rerun recording requested (--record-path={self.record_path!r}) but "
+                    f"Rerun failed to start: {exc}\n"
+                    "Fix on the robot:  uv sync -p 3.12 --all-packages\n"
+                    "Then confirm:  .venv/bin/python -c 'import rerun; print(rerun.__version__)'"
+                ) from exc
             logger.warning("Rerun unavailable (%s); continuing without visualization", exc)
             self.enabled = False
             self._rr = None

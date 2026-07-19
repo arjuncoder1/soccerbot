@@ -157,6 +157,13 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
 
     from soccerbot.config import DEFAULT_REPLAY_TRAJECTORY
 
+    record_path = args.record_path
+    if record_path:
+        # Make relative paths stable (run_soccerbot.sh cds to repo root; still
+        # helps when invoking python -m soccerbot from elsewhere).
+        record_path = str(Path(record_path).expanduser().resolve())
+        Path(record_path).parent.mkdir(parents=True, exist_ok=True)
+
     cfg = OrchestratorConfig(
         backend=args.backend,
         iface=args.iface,
@@ -168,7 +175,7 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         fps=args.fps,
         device=args.device,
         rerun=not args.no_rerun,
-        record_path=args.record_path,
+        record_path=record_path,
         display=not args.no_display,
         teleimager_host=args.teleimager_host,
         remote_server=args.remote_server,
