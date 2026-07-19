@@ -64,6 +64,8 @@ TORSO_JOINT_INDEX: dict[str, int] = {
 
 
 class G1Arms:
+    WAIST_KP = 80.0
+    WAIST_KD = 3.0
     """Arms-only G1 interface over DDS (rt/lowstate in, rt/arm_sdk out)."""
 
     def __init__(self, kp: float = 60.0, kd: float = 1.5, state_timeout_s: float = 10.0) -> None:
@@ -187,8 +189,8 @@ class G1Arms:
                     cmd.motor_cmd[idx].q = float(state.motor_state[idx].q)
                     cmd.motor_cmd[idx].dq = 0.0
                     cmd.motor_cmd[idx].tau = 0.0
-                    cmd.motor_cmd[idx].kp = self.kp
-                    cmd.motor_cmd[idx].kd = self.kd
+                    cmd.motor_cmd[idx].kp = self.WAIST_KP
+                    cmd.motor_cmd[idx].kd = self.WAIST_KD
         # Extra locked joints override the measured hold above.
         for idx, spec in self._locked_joints.items():
             cmd.motor_cmd[idx].q = float(spec["q"])

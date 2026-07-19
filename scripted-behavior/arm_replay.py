@@ -77,6 +77,9 @@ def replay_arm_trajectory(
     iface: str | None,
     max_duration_s: float | None = None,
     slew_clamp: float = REPLAY_SLEW_CLAMP,
+    speed_factor: float = 1.0,
+    instant_engage: bool = False,
+    arms=None,
 ) -> None:
     """Play back a JSON arm-qpos trajectory over ``rt/arm_sdk``.
 
@@ -86,7 +89,7 @@ def replay_arm_trajectory(
     traj = load_trajectory(trajectory_path)
     joints = traj["joints_order"]
     frames = traj["frames"]
-    fps = float(traj.get("fps", 30.0))
+    fps = float(traj.get("fps", 30.0)) * speed_factor
     dt = 1.0 / fps
     n = len(frames)
     nominal_s = n * dt
@@ -103,12 +106,12 @@ def replay_arm_trajectory(
         slew_clamp,
     )
 
-    G1Arms = _import_g1_arms()
-    from dds import ensure_dds
-
-    ensure_dds(iface)
-    arms = G1Arms(kp=60.0, kd=1.5)
-    arms.connect()
+    if arms is None:
+        G1Arms = _import_g1_arms()
+        from dds import ensure_dds
+        ensure_dds(iface)
+        arms = G1Arms(kp=60.0, kd=1.5)
+        arms.connect()
 
     def _pack(frame_qs: list[float]) -> dict[str, float]:
         return {f"{name}.q": float(q) for name, q in zip(joints, frame_qs)}
@@ -125,7 +128,8 @@ def replay_arm_trajectory(
             start_pose[j] + alpha * (target0[j] - start_pose[j])
             for j in range(14)
         ]
-        arms.send_arm_positions(_pack(blended), weight=alpha)
+        w = 1.0 if instant_engage else alpha
+        arms.send_arm_positions(_pack(blended), weight=w)
         time.sleep(dt)
 
     # Actual replay.

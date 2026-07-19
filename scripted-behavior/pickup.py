@@ -19,7 +19,7 @@ logger = logging.getLogger("scripted_behavior.pickup")
 
 LOCAL_VLA_DIR = REPO_ROOT / "local-vla-inference"
 REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep148_prod2.json"
-DEFAULT_POLICY = "ajkoder/g1-pickup-ball-act"
+DEFAULT_POLICY = "/home/waldo/soccerbot/model4/pretrained_model"
 DEFAULT_CLAMP = 0.01
 DEFAULT_CAMERA = "zmq://192.168.123.164:55555"
 _LOCAL_VLA_MODULE = "local_vla_inference_main"
@@ -47,7 +47,7 @@ def run_pickup_policy(cfg: OrchestratorConfig) -> None:
         from arm_replay import replay_arm_trajectory
 
         logger.info("Replaying pickup trajectory: %s", REPLAY_TRAJECTORY)
-        replay_arm_trajectory(REPLAY_TRAJECTORY, iface=cfg.iface)
+        replay_arm_trajectory(REPLAY_TRAJECTORY, iface=cfg.iface, speed_factor=0.7, instant_engage=True)
         logger.info("Pickup replay finished")
         return
 

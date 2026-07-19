@@ -225,3 +225,7 @@ __marimo__/
 # Vendored LeRobot test binaries (avoid Git LFS)
 thirdparty/lerobot/tests/artifacts/
 .DS_Store
+# Model weights (too large for GitHub)
+model/
+model3/
+model4/

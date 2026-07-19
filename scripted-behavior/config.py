@@ -23,9 +23,10 @@ class PickupBackend(str, enum.Enum):
 class OrchestratorConfig:
     backend: PickupBackend = PickupBackend.LOCAL
     iface: str | None = None  # network iface passed through to the VLA client
-    pickup_duration_s: float = 30.0
+    pickup_duration_s: float = 20.0
     pickup_extra_args: list[str] = field(default_factory=list)
     remote_server: str | None = None  # "HOST:PORT" for remote backend
+    mode: str = "replay"
     teleimager_host: str = "192.168.123.164"  # robot IP hosting teleimager ZMQ image_server
     # Shared local-vla-inference.telemetry.Telemetry instance, set once by
     # soccerbot.main.run_demo() and read by turn_180.py/avoid.py/throw.py.

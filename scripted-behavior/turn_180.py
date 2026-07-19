@@ -40,7 +40,7 @@ TURN_TARGET_RAD = math.pi
 TURN_TOLERANCE_RAD = math.radians(5.0)
 # Hard safety timeout: bail (StopMove) after this many seconds regardless of
 # what the IMU reports. Well above 2 * (pi / TURN_YAW_RATE_RPS).
-TURN_180_MAX_S = 15.0
+TURN_180_MAX_S = 30.0
 # How often we re-issue Move() AND re-publish the arm hold.
 TURN_CONTROL_HZ = 20.0
 # After StopMove(), keep holding arms while the feet settle before returning.
@@ -80,10 +80,13 @@ def turn_180_degrees(cfg: OrchestratorConfig) -> None:
     # visible as a hard jerk. A single weight=1 publish is a no-op if arm_sdk
     # is already engaged, and an instantaneous engage-at-current-pose otherwise.
     arms.send_arm_positions(hold_pose, weight=1.0)
+    arms.lock_joint(12, q=0.0, kp=0.0, kd=2.0)
 
     loco = LocoClient()
     loco.SetTimeout(3.0)
     loco.Init()
+    loco.Start()
+    time.sleep(0.5)
 
     stop_arm_hold = threading.Event()
     dt = 1.0 / TURN_CONTROL_HZ
