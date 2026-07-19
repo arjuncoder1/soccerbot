@@ -18,6 +18,7 @@ from pathlib import Path
 
 from config import REPO_ROOT, OrchestratorConfig, PickupBackend
 from pickup import run_pickup_policy
+from sidestep import sidestep as do_sidestep
 from turn_180 import turn_180_degrees
 
 logger = logging.getLogger("scripted_behavior.orchestrator")
@@ -58,17 +59,25 @@ def run_demo(cfg: OrchestratorConfig) -> None:
     bridge_thread.start()
 
     try:
-        logger.info("=== Stage 1/3: PICKUP (%s) ===", cfg.backend.value)
+        logger.info("=== Stage 1/4: PICKUP (%s) ===", cfg.backend.value)
         run_pickup_policy(cfg)
 
         bridge_pose[0] = bridge.get_arm_positions()
         bridge.send_arm_positions(bridge_pose[0], weight=1.0)
 
-        logger.info("=== Stage 2/3: TURN 180 ===")
+        logger.info("=== Stage 2/4: TURN 180 ===")
         bridge.lock_joint(12, q=0.0, kp=0.0, kd=2.0)
         turn_180_degrees(cfg)
         bridge.unlock_joint(12)
 
+        bridge_pose[0] = bridge.get_arm_positions()
+        bridge.send_arm_positions(bridge_pose[0], weight=1.0)
+
+        logger.info("=== Stage 3/4: SIDESTEP (8L 8R) ===")
+        do_sidestep("left", 8, cfg, arms=bridge)
+        bridge_pose[0] = bridge.get_arm_positions()
+        bridge.send_arm_positions(bridge_pose[0], weight=1.0)
+        do_sidestep("right", 8, cfg, arms=bridge)
         bridge_pose[0] = bridge.get_arm_positions()
         bridge.send_arm_positions(bridge_pose[0], weight=1.0)
 
@@ -78,7 +87,7 @@ def run_demo(cfg: OrchestratorConfig) -> None:
             bridge_thread.join(timeout=1.0)
             _record_throw(cfg)
         else:
-            logger.info("=== Stage 3/3: THROW (replay) ===")
+            logger.info("=== Stage 4/4: THROW (replay) ===")
             _replay_throw(cfg, bridge, bridge_stop, bridge_thread)
 
         logger.info("Demo complete")
@@ -226,7 +235,7 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
     p.add_argument(
         "--pickup-duration",
         type=float,
-        default=20.0,
+        default=30.0,
         help="Seconds to run the pickup policy before advancing to stage 2.",
     )
     p.add_argument(

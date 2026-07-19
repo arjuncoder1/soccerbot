@@ -52,7 +52,7 @@ def _import_g1_arms():
     return G1Arms
 
 
-def sidestep(direction: str, steps: int, cfg: OrchestratorConfig) -> None:
+def sidestep(direction: str, steps: int, cfg: OrchestratorConfig, *, arms=None) -> None:
     """Shuffle ``steps`` steps ``direction`` (``"left"`` | ``"right"``).
 
     Open-loop on time; nominal distance per step is
@@ -65,36 +65,39 @@ def sidestep(direction: str, steps: int, cfg: OrchestratorConfig) -> None:
 
     vy_signed = SIDESTEP_VY_MPS if direction == "left" else -SIDESTEP_VY_MPS
 
-    G1Arms = _import_g1_arms()
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-
     ensure_dds(cfg.iface)
 
-    arms = G1Arms(kp=60.0, kd=1.5)
-    arms.connect()
-    hold_pose = dict(arms.get_arm_positions())
-    # See turn_180.py for the rationale: avoid the 0->1 arm_sdk ramp which
-    # briefly hands the arms back to the balancer and causes a jerk when the
-    # previous stage already had arm_sdk engaged at a non-neutral pose.
-    arms.send_arm_positions(hold_pose, weight=1.0)
+    own_arms = arms is None
+    if own_arms:
+        G1Arms = _import_g1_arms()
+        arms = G1Arms(kp=60.0, kd=1.5)
+        arms.connect()
+        hold_pose = dict(arms.get_arm_positions())
+        arms.send_arm_positions(hold_pose, weight=1.0)
 
     loco = LocoClient()
     loco.SetTimeout(3.0)
     loco.Init()
+    loco.Start()
 
     stop_arm_hold = threading.Event()
     dt = 1.0 / SIDESTEP_CONTROL_HZ
+    holder = None
 
-    def _arm_holder() -> None:
-        while not stop_arm_hold.is_set():
-            try:
-                arms.send_arm_positions(hold_pose, weight=1.0)
-            except Exception:  # noqa: BLE001 -- keep looping; final send in finally
-                logger.exception("arm hold publish failed (continuing)")
-            time.sleep(dt)
+    if own_arms:
+        hold_pose_local = dict(arms.get_arm_positions())
 
-    holder = threading.Thread(target=_arm_holder, name="sidestep-arm-hold", daemon=True)
-    holder.start()
+        def _arm_holder() -> None:
+            while not stop_arm_hold.is_set():
+                try:
+                    arms.send_arm_positions(hold_pose_local, weight=1.0)
+                except Exception:  # noqa: BLE001
+                    logger.exception("arm hold publish failed (continuing)")
+                time.sleep(dt)
+
+        holder = threading.Thread(target=_arm_holder, name="sidestep-arm-hold", daemon=True)
+        holder.start()
 
     logger.info(
         "Sidestepping %d step(s) to the %s: vy=%+.2f m/s, %.2fs per step, "
@@ -134,14 +137,11 @@ def sidestep(direction: str, steps: int, cfg: OrchestratorConfig) -> None:
 
         settle_end = time.monotonic() + SIDESTEP_END_SETTLE_S
         while time.monotonic() < settle_end:
-            try:
-                arms.send_arm_positions(hold_pose, weight=1.0)
-            except Exception:  # noqa: BLE001
-                logger.exception("arm hold publish failed during settle")
             time.sleep(dt)
 
-        stop_arm_hold.set()
-        holder.join(timeout=1.0)
+        if own_arms and holder is not None:
+            stop_arm_hold.set()
+            holder.join(timeout=1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -66,6 +66,7 @@ TORSO_JOINT_INDEX: dict[str, int] = {
 class G1Arms:
     WAIST_KP = 80.0
     WAIST_KD = 3.0
+    WAIST_PITCH_KP = 150.0
     """Arms-only G1 interface over DDS (rt/lowstate in, rt/arm_sdk out)."""
 
     def __init__(self, kp: float = 60.0, kd: float = 1.5, state_timeout_s: float = 10.0) -> None:
@@ -86,6 +87,7 @@ class G1Arms:
         # ``lock_joint(...)``; empty by default so existing callers (e.g. the
         # ACT/pi0.5 policy paths) see identical behaviour.
         self._locked_joints: dict[int, dict[str, float]] = {}
+        self._waist_ref: dict[int, float] = {}
 
     def connect(self, *, state_only: bool = False) -> None:
         """Requires ChannelFactoryInitialize() to have been called already.
@@ -186,10 +188,18 @@ class G1Arms:
         if state is not None:
             for name, idx in TORSO_JOINT_INDEX.items():
                 if idx not in self._locked_joints:
-                    cmd.motor_cmd[idx].q = float(state.motor_state[idx].q)
+                    if idx in (13, 14):
+                        if idx not in self._waist_ref:
+                            self._waist_ref[idx] = float(state.motor_state[idx].q)
+                        q_target = self._waist_ref[idx]
+                        kp = self.WAIST_PITCH_KP if idx == 14 else self.WAIST_KP
+                    else:
+                        q_target = float(state.motor_state[idx].q)
+                        kp = self.WAIST_KP
+                    cmd.motor_cmd[idx].q = q_target
                     cmd.motor_cmd[idx].dq = 0.0
                     cmd.motor_cmd[idx].tau = 0.0
-                    cmd.motor_cmd[idx].kp = self.WAIST_KP
+                    cmd.motor_cmd[idx].kp = kp
                     cmd.motor_cmd[idx].kd = self.WAIST_KD
         # Extra locked joints override the measured hold above.
         for idx, spec in self._locked_joints.items():

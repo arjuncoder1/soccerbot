@@ -35,7 +35,7 @@ logger = logging.getLogger("scripted_behavior.turn_180")
 # 0.6 rad/s * ~5.2 s ~= pi rad; slow enough that the balancer is comfortable.
 TURN_YAW_RATE_RPS = -0.6
 # Target rotation magnitude (radians).
-TURN_TARGET_RAD = math.pi
+TURN_TARGET_RAD = math.pi * 1.5
 # Accept the turn as "done" once within this tolerance of TURN_TARGET_RAD.
 TURN_TOLERANCE_RAD = math.radians(5.0)
 # Hard safety timeout: bail (StopMove) after this many seconds regardless of
