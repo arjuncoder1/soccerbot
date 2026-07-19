@@ -92,14 +92,6 @@ PY
   fi
 
   if "$VENV_DIR/bin/python" - <<'PY'
-import rerun  # noqa: F401
-print("rerun ok")
-PY
-  then ok "rerun-sdk (viz)"
-  else soft "rerun-sdk missing — ACT will run without live viz (lerobot[viz])"
-  fi
-
-  if "$VENV_DIR/bin/python" - <<'PY'
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path("soccerbot/src").resolve()))

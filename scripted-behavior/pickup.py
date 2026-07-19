@@ -1,7 +1,7 @@
 """Stage 1: run the learned ACT pickup policy in-process (or replay a trajectory).
 
 Delegates to ``local-vla-inference`` via import (no subprocess) so slew
-clamping, Ctrl+C graceful reset, and Rerun telemetry stay in one process.
+clamping and Ctrl+C graceful reset stay in one process.
 
 A third backend, ``replay``, streams a pre-recorded arm-qpos trajectory from
 ``trajectories/`` over ``rt/arm_sdk``.
@@ -102,7 +102,6 @@ def run_pickup_policy(cfg: OrchestratorConfig) -> None:
         clamp=clamp,
         duration=cfg.pickup_duration_s,
         leave_arms_engaged=True,
-        rerun=True,
     )
     logger.info(
         "Starting in-process ACT pickup: policy=%s clamp=%.3f camera=%s",

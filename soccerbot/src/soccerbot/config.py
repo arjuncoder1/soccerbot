@@ -34,7 +34,6 @@ class OrchestratorConfig:
     pickup_duration_s: float = 30.0
     fps: float = 30.0
     device: str | None = None
-    rerun: bool = True
     teleimager_host: str = "192.168.123.164"
     remote_server: str | None = None
     replay_trajectory: Path = DEFAULT_REPLAY_TRAJECTORY

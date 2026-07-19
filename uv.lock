@@ -3691,14 +3691,14 @@ name = "local-vla-inference"
 version = "0.1.0"
 source = { editable = "local-vla-inference" }
 dependencies = [
-    { name = "lerobot", extra = ["viz"] },
+    { name = "lerobot" },
     { name = "pyzmq" },
     { name = "unitree-sdk2py" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "lerobot", extras = ["viz"], editable = "thirdparty/lerobot" },
+    { name = "lerobot", editable = "thirdparty/lerobot" },
     { name = "pyzmq", specifier = ">=26.0.0" },
     { name = "unitree-sdk2py", git = "https://github.com/unitreerobotics/unitree_sdk2_python.git" },
 ]
@@ -6526,14 +6526,14 @@ name = "soccerbot"
 version = "0.1.0"
 source = { editable = "soccerbot" }
 dependencies = [
-    { name = "lerobot", extra = ["viz"] },
+    { name = "lerobot" },
     { name = "local-vla-inference" },
     { name = "scripted-behavior" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "lerobot", extras = ["viz"], editable = "thirdparty/lerobot" },
+    { name = "lerobot", editable = "thirdparty/lerobot" },
     { name = "local-vla-inference", editable = "local-vla-inference" },
     { name = "scripted-behavior", editable = "scripted-behavior" },
 ]

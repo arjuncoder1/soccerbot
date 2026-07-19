@@ -48,7 +48,6 @@ def run_pickup(cfg: OrchestratorConfig) -> None:
         duration=cfg.pickup_duration_s,
         fps=cfg.fps,
         device=cfg.device,
-        rerun=cfg.rerun,
         leave_arms_engaged=True,
     )
     logger.info(

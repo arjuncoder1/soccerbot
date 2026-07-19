@@ -111,7 +111,6 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         default=None,
         help="JSON path for --backend replay (default: pickup_ep148_prod2.json).",
     )
-    p.add_argument("--no-rerun", action="store_true", help="Disable Rerun visualization.")
     p.add_argument(
         "--dry-run-config",
         action="store_true",
@@ -133,7 +132,6 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         pickup_duration_s=args.pickup_duration,
         fps=args.fps,
         device=args.device,
-        rerun=not args.no_rerun,
         teleimager_host=args.teleimager_host,
         remote_server=args.remote_server,
         replay_trajectory=(
@@ -153,13 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     cfg = parse_args(argv)
     logger.info(
-        "Soccerbot starting: backend=%s policy=%s clamp=%.3f camera=%s iface=%s rerun=%s",
+        "Soccerbot starting: backend=%s policy=%s clamp=%.3f camera=%s iface=%s",
         cfg.backend.value,
         cfg.policy,
         cfg.clamp,
         cfg.camera,
         cfg.iface,
-        cfg.rerun,
     )
     logger.info(
         "Tip: keep ./killswitch.sh --iface %s (or --gui) open in another terminal",

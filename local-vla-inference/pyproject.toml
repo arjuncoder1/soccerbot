@@ -6,7 +6,7 @@ readme = "README.md"
 # cyclonedds 0.10.2 (unitree_sdk2py) needs Python <3.13. Sync the repo root with 3.12.
 requires-python = ">=3.12"
 dependencies = [
-    "lerobot[viz]",
+    "lerobot",
     "pyzmq>=26.0.0",
     "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
 ]
@@ -20,7 +20,6 @@ py-modules = [
     "main",
     "g1_arms",
     "front_camera",
-    "telemetry",
     "dds_init",
     "embodiment_g1_14d",
     "embodiment_g1d_16d",

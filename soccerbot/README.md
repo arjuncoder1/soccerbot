@@ -7,7 +7,7 @@ in sibling packages that soccerbot imports in-process:
 
 | Dependency | Role |
 |---|---|
-| `local-vla-inference/` | ACT pickup (`ajkoder/g1-pickup-ball-act`), slew clamp, teleimager RGB, Rerun |
+| `local-vla-inference/` | ACT pickup (`ajkoder/g1-pickup-ball-act`), slew clamp, teleimager RGB |
 | `scripted-behavior/` | Turn 180°, avoid/shuffle, throw, JSON trajectory replay |
 
 ## Run
@@ -50,8 +50,6 @@ Defaults match the validated local ACT command:
   the arm overlay — an emergency never waits on an arm connect.
 - Home pose defaults to Unitree zeros; override via
   `scripted-behavior/home_pose.json` (validated against URDF limits at load).
-- Rerun telemetry is fail-safe: any viz error disables logging, never the
-  control loop.
 
 ## Diagnose
 

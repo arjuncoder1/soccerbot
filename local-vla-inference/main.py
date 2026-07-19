@@ -130,16 +130,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Default: act_log_<timestamp>.csv in the current directory.",
     )
     p.add_argument(
-        "--rerun",
-        action="store_true",
-        help="Spawn a Rerun viewer and stream teleimager RGB + arm target/cmd/measured.",
-    )
-    p.add_argument(
-        "--no-rerun",
-        action="store_true",
-        help="Disable Rerun even if the caller defaulted it on.",
-    )
-    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Load policy and print one fake forward pass; do not connect hardware.",
@@ -170,7 +160,6 @@ def build_args(
     duration: float = 30.0,
     fps: float = 30.0,
     device: str | None = None,
-    rerun: bool = True,
     leave_arms_engaged: bool = True,
     dry_run: bool = False,
     image_no_motors: bool = False,
@@ -188,8 +177,6 @@ def build_args(
         duration=duration,
         fps=fps,
         device=device,
-        rerun=rerun,
-        no_rerun=not rerun,
         dry_run=dry_run,
         image_no_motors=image_no_motors,
         leave_arms_engaged=leave_arms_engaged,
@@ -369,8 +356,6 @@ def run(args: argparse.Namespace) -> None:
     from lerobot.policies.act import ACTPolicy
     from lerobot.policies.utils import build_inference_frame, make_robot_action
 
-    from telemetry import Telemetry
-
     if args.dry_run and args.image_no_motors:
         raise SystemExit("Use either --dry-run or --image-no-motors, not both.")
 
@@ -420,10 +405,6 @@ def run(args: argparse.Namespace) -> None:
 
     # Engage arm_sdk smoothly at the current pose before the policy takes over.
     arms.hold_current_pose(ramp_s=2.0)
-
-    rerun_on = bool(getattr(args, "rerun", False)) and not bool(getattr(args, "no_rerun", False))
-    telemetry = Telemetry(enabled=rerun_on, session_name="soccerbot-act")
-    telemetry.start()
 
     h, w, _ = layout.IMAGE_SHAPE
     dt = 1.0 / args.fps
@@ -514,24 +495,6 @@ def run(args: argparse.Namespace) -> None:
                 + [round(snapshot[k], 5) for k in snapshot_keys]
             )
 
-            telemetry.log_step(
-                step=step,
-                elapsed_s=elapsed,
-                rgb=front_rgb,
-                measured=measured,
-                target=dds_action,
-                commanded=cmd_q,
-                extras={
-                    "clamp_hits": float(clamp_hits),
-                    "max_target_gap": float(max_gap),
-                    "cam_ms": float(cam_ms),
-                    "policy_ms": float(policy_ms),
-                    "imu_pitch": float(snapshot.get("imu.pitch", 0.0)),
-                    "imu_roll": float(snapshot.get("imu.roll", 0.0)),
-                },
-                stage="pickup",
-            )
-
             step += 1
             if step % int(args.fps) == 0:
                 worst = arm_keys[int(np.argmax(gaps))]
@@ -560,7 +523,6 @@ def run(args: argparse.Namespace) -> None:
     finally:
         log_file.close()
         logger.info("Step log written to %s (%d steps)", log_path, step)
-        telemetry.stop()
         if not interrupted:
             try:
                 front.disconnect()
