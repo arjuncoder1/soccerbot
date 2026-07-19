@@ -6,7 +6,7 @@ into the orchestrator process. Ctrl+C in the orchestrator propagates
 to the child.
 
 A third backend, ``replay``, streams the pre-recorded arm-qpos
-trajectory at ``trajectories/pickup_ep10.json`` directly over
+trajectory at ``trajectories/pickup_ep148_prod2.json`` directly over
 ``rt/arm_sdk`` -- no learned policy, no camera, no torch.
 """
 
@@ -21,7 +21,7 @@ logger = logging.getLogger("scripted_behavior.pickup")
 
 LOCAL_VLA_RUN = REPO_ROOT / "local-vla-inference" / "run.sh"
 REMOTE_VLA_RUN = REPO_ROOT / "remote-vla-inference" / "run_client.sh"
-REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep10.json"
+REPLAY_TRAJECTORY = REPO_ROOT / "scripted-behavior" / "trajectories" / "pickup_ep148_prod2.json"
 
 
 def run_pickup_policy(cfg: OrchestratorConfig) -> None:

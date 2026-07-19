@@ -1,28 +1,27 @@
 """Stage 3: shuffle-avoid FSM.
 
-Repeatedly sidestep 2 left / 2 right until the RealSense human detector
+Repeatedly sidestep 2 left / 2 right until the head-camera human detector
 reports no person within ``AVOID_CLEAR_DISTANCE_M``. Bails out after
 ``AVOID_MAX_CYCLES`` cycles so the demo never hangs on a stationary
 spectator.
 
-The lateral motion primitive lives in ``sidestep.py``; the RealSense
-detector core lives in ``realsense-human-detection/realsense_human_avoid.py``
-(``HumanDetector`` class) and is opened once per stage invocation.
+The lateral motion primitive lives in ``sidestep.py``; the human detector
+core lives in ``human_detector_teleimager.py`` (``HumanDetector`` class,
+teleimager head-camera + YOLO, distance estimated from bbox height).
 """
 
 from __future__ import annotations
 
 import logging
-import sys as _sys
 import time
 
-from config import REPO_ROOT, OrchestratorConfig
+from config import OrchestratorConfig
 from sidestep import sidestep
 
 logger = logging.getLogger("scripted_behavior.avoid")
 
 # Trigger zone: person closer than this counts as "in the way".
-AVOID_CLEAR_DISTANCE_M = 1.0
+AVOID_CLEAR_DISTANCE_M = 4.0
 # Give-up limit; throw stage runs regardless.
 AVOID_MAX_CYCLES = 8
 # How many detector polls to accept as "clear" before we believe it.
@@ -30,16 +29,10 @@ AVOID_CLEAR_CONFIRM_POLLS = 2
 # Max seconds we wait per human-detect check before assuming clear.
 AVOID_CHECK_TIMEOUT_S = 2.0
 
-REALSENSE_DIR = REPO_ROOT / "realsense-human-detection"
-
 
 def _import_human_detector():
-    """Import ``HumanDetector`` from the sibling package without polluting sys.path."""
-    _sys.path.insert(0, str(REALSENSE_DIR))
-    try:
-        from realsense_human_avoid import HumanDetector  # type: ignore[import-not-found]
-    finally:
-        _sys.path.pop(0)
+    """Import ``HumanDetector`` from the teleimager module."""
+    from human_detector_teleimager import HumanDetector  # type: ignore[import-not-found]
     return HumanDetector
 
 
@@ -49,15 +42,32 @@ def _confirm_clear(detector, distance_m: float) -> bool:
     (treated as clear rather than block the demo forever)."""
     deadline = time.monotonic() + AVOID_CHECK_TIMEOUT_S
     clear_streak = 0
+    polls = 0
     while time.monotonic() < deadline:
-        nearest = detector.poll_nearest_person(within_m=distance_m)
-        if nearest is None:
+        snap = detector.poll_snapshot()
+        if snap is None:
+            continue
+        polls += 1
+        if not snap.detections:
             clear_streak += 1
+            logger.info("poll %d: no person (streak %d/%d)",
+                        polls, clear_streak, AVOID_CLEAR_CONFIRM_POLLS)
             if clear_streak >= AVOID_CLEAR_CONFIRM_POLLS:
                 return True
-        else:
-            logger.info("Detector sees person at %.2f m", nearest)
-            return False
+            continue
+        nearest = min(d.distance_m for d in snap.detections)
+        if nearest > distance_m:
+            clear_streak += 1
+            logger.info(
+                "poll %d: %d person(s) but nearest %.2f m > %.1f m gate (streak %d/%d)",
+                polls, len(snap.detections), nearest, distance_m,
+                clear_streak, AVOID_CLEAR_CONFIRM_POLLS,
+            )
+            if clear_streak >= AVOID_CLEAR_CONFIRM_POLLS:
+                return True
+            continue
+        logger.info("poll %d: person at %.2f m -- BLOCKED", polls, nearest)
+        return False
     logger.warning(
         "Detector timeout after %.1fs with no positive detections -- treating as clear",
         AVOID_CHECK_TIMEOUT_S,
@@ -67,7 +77,7 @@ def _confirm_clear(detector, distance_m: float) -> bool:
 
 def avoid_humans(cfg: OrchestratorConfig) -> None:
     HumanDetector = _import_human_detector()
-    with HumanDetector() as detector:
+    with HumanDetector(host=cfg.teleimager_host) as detector:
         for cycle in range(1, AVOID_MAX_CYCLES + 1):
             if _confirm_clear(detector, AVOID_CLEAR_DISTANCE_M):
                 logger.info("Avoid stage clear on cycle %d", cycle)
@@ -96,13 +106,20 @@ def avoid_humans(cfg: OrchestratorConfig) -> None:
 def _detect_only(cfg: OrchestratorConfig, seconds: float) -> int:
     HumanDetector = _import_human_detector()
     t0 = time.monotonic()
-    with HumanDetector() as detector:
+    with HumanDetector(host=cfg.teleimager_host) as detector:
         while time.monotonic() - t0 < seconds:
-            nearest = detector.poll_nearest_person(within_m=AVOID_CLEAR_DISTANCE_M)
-            if nearest is None:
-                logger.info("clear (within %.1f m)", AVOID_CLEAR_DISTANCE_M)
-            else:
-                logger.info("person at %.2f m", nearest)
+            snap = detector.poll_snapshot()
+            if snap is None:
+                continue
+            if not snap.detections:
+                logger.info("no person in frame")
+                continue
+            nearest = min(d.distance_m for d in snap.detections)
+            trigger = " [TRIGGER]" if nearest <= AVOID_CLEAR_DISTANCE_M else ""
+            logger.info(
+                "%d person(s), nearest %.2f m (avoid threshold %.1f m)%s",
+                len(snap.detections), nearest, AVOID_CLEAR_DISTANCE_M, trigger,
+            )
     return 0
 
 
@@ -113,11 +130,16 @@ def _cli() -> int:
     p = argparse.ArgumentParser(description="Standalone shuffle-avoid stage test.")
     p.add_argument("--iface", default=None, help="DDS network interface (e.g. eth0).")
     p.add_argument(
+        "--teleimager-host",
+        default="192.168.123.164",
+        help="Robot IP running teleimager (default: %(default)s).",
+    )
+    p.add_argument(
         "--detect-only",
         type=float,
         metavar="SECS",
         default=None,
-        help="Only poll the RealSense detector for SECS seconds; no motion.",
+        help="Only poll the teleimager human detector for SECS seconds; no motion.",
     )
     args = p.parse_args()
 
@@ -125,7 +147,7 @@ def _cli() -> int:
         level=_logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = OrchestratorConfig(iface=args.iface)
+    cfg = OrchestratorConfig(iface=args.iface, teleimager_host=args.teleimager_host)
     try:
         if args.detect_only is not None:
             return _detect_only(cfg, args.detect_only)

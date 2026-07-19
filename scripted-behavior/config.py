@@ -26,3 +26,4 @@ class OrchestratorConfig:
     pickup_duration_s: float = 30.0
     pickup_extra_args: list[str] = field(default_factory=list)
     remote_server: str | None = None  # "HOST:PORT" for remote backend
+    teleimager_host: str = "192.168.123.164"  # robot IP hosting teleimager ZMQ image_server

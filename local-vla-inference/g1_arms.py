@@ -174,7 +174,22 @@ class G1Arms:
             cmd.motor_cmd[idx].tau = 0.0
             cmd.motor_cmd[idx].kp = self.kp
             cmd.motor_cmd[idx].kd = self.kd
-        # Extra locked joints (e.g. waist yaw hold during pickup replay).
+        # arm_sdk controls waist joints (12-14) in addition to arm joints (15-28)
+        # per the official g1_arm7_sdk_dds_example. Always hold them at the current
+        # measured position with full stiffness so they don't go limp when arm_sdk
+        # takes over. _locked_joints overrides below if the caller pinned a specific
+        # waist target.
+        with self._lock:
+            state = self._low_state
+        if state is not None:
+            for name, idx in TORSO_JOINT_INDEX.items():
+                if idx not in self._locked_joints:
+                    cmd.motor_cmd[idx].q = float(state.motor_state[idx].q)
+                    cmd.motor_cmd[idx].dq = 0.0
+                    cmd.motor_cmd[idx].tau = 0.0
+                    cmd.motor_cmd[idx].kp = self.kp
+                    cmd.motor_cmd[idx].kd = self.kd
+        # Extra locked joints override the measured hold above.
         for idx, spec in self._locked_joints.items():
             cmd.motor_cmd[idx].q = float(spec["q"])
             cmd.motor_cmd[idx].dq = 0.0

@@ -33,7 +33,7 @@ logger = logging.getLogger("scripted_behavior.turn_180")
 
 # Yaw rate command sent to LocoClient.Move. Positive = CCW viewed from above.
 # 0.6 rad/s * ~5.2 s ~= pi rad; slow enough that the balancer is comfortable.
-TURN_YAW_RATE_RPS = 0.6
+TURN_YAW_RATE_RPS = -0.6
 # Target rotation magnitude (radians).
 TURN_TARGET_RAD = math.pi
 # Accept the turn as "done" once within this tolerance of TURN_TARGET_RAD.
@@ -72,9 +72,14 @@ def turn_180_degrees(cfg: OrchestratorConfig) -> None:
     arms = G1Arms(kp=60.0, kd=1.5)
     arms.connect()
     hold_pose = dict(arms.get_arm_positions())
-    # Anchor the arms before the base starts moving so any drift from the
-    # pickup handoff is squashed first.
-    arms.hold_current_pose(ramp_s=0.5)
+    # Do NOT re-ramp arm_sdk from 0->1: if the previous stage left the overlay
+    # engaged (weight=1) that ramp starts by publishing weight=0, which the
+    # firmware treats as "hand arms back to balancer" for ~0.5s. Coming out of
+    # a big-reach pose (e.g. after the pickup replay) the balancer immediately
+    # yanks the arms toward its neutral, then we snap them back at weight=1 -
+    # visible as a hard jerk. A single weight=1 publish is a no-op if arm_sdk
+    # is already engaged, and an instantaneous engage-at-current-pose otherwise.
+    arms.send_arm_positions(hold_pose, weight=1.0)
 
     loco = LocoClient()
     loco.SetTimeout(3.0)

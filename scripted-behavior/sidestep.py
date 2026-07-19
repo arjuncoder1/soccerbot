@@ -73,7 +73,10 @@ def sidestep(direction: str, steps: int, cfg: OrchestratorConfig) -> None:
     arms = G1Arms(kp=60.0, kd=1.5)
     arms.connect()
     hold_pose = dict(arms.get_arm_positions())
-    arms.hold_current_pose(ramp_s=0.5)
+    # See turn_180.py for the rationale: avoid the 0->1 arm_sdk ramp which
+    # briefly hands the arms back to the balancer and causes a jerk when the
+    # previous stage already had arm_sdk engaged at a non-neutral pose.
+    arms.send_arm_positions(hold_pose, weight=1.0)
 
     loco = LocoClient()
     loco.SetTimeout(3.0)
