@@ -30,7 +30,7 @@ from soccerbot.config import (
     OrchestratorConfig,
     PickupBackend,
 )
-from soccerbot.deps import ensure_logic_imports
+from soccerbot.deps import ensure_logic_imports, import_telemetry
 from soccerbot.pickup import run_pickup
 from soccerbot.safety import graceful_reset
 
@@ -47,6 +47,21 @@ def run_demo(cfg: OrchestratorConfig) -> None:
     from throw import throw_ball
     from turn_180 import turn_180_degrees
 
+    # Shared Rerun session for stages 2-4 (turn/avoid/throw). Stage 1 (pickup)
+    # keeps its own separate, already-working "soccerbot-act" session started
+    # inside local-vla-inference/main.py's run() -- not touched here, so this
+    # doesn't risk anything in the tested ACT control loop. Side-channel only:
+    # every telemetry call reads state a stage already reads for its own
+    # control logic; cfg.rerun=False (--no-rerun) makes every method a no-op.
+    telemetry_mod = import_telemetry()
+    telemetry = telemetry_mod.Telemetry(
+        enabled=cfg.rerun,
+        session_name="soccerbot_demo",
+        record_path=cfg.record_path,
+        display=cfg.display,
+    )
+    telemetry.start()
+
     # Bridge soccerbot config → scripted-behavior config (shared field names).
     scripted = ScriptedConfig(
         backend=ScriptedBackend(cfg.backend.value),
@@ -54,19 +69,29 @@ def run_demo(cfg: OrchestratorConfig) -> None:
         pickup_duration_s=cfg.pickup_duration_s,
         teleimager_host=cfg.teleimager_host,
         remote_server=cfg.remote_server,
+        telemetry=telemetry,
     )
 
-    logger.info("=== Stage 1/4: PICKUP (%s) ===", cfg.backend.value)
-    run_pickup(cfg)
+    try:
+        telemetry.log_stage("STAGE 1/4: PICKUP (%s)" % cfg.backend.value)
+        logger.info("=== Stage 1/4: PICKUP (%s) ===", cfg.backend.value)
+        run_pickup(cfg)
 
-    logger.info("=== Stage 2/4: TURN 180 ===")
-    turn_180_degrees(scripted)
+        telemetry.log_stage("STAGE 2/4: TURN 180")
+        logger.info("=== Stage 2/4: TURN 180 ===")
+        turn_180_degrees(scripted)
 
-    logger.info("=== Stage 3/4: AVOID (shuffle until clear) ===")
-    avoid_humans(scripted)
+        telemetry.log_stage("STAGE 3/4: AVOID (shuffle until clear)")
+        logger.info("=== Stage 3/4: AVOID (shuffle until clear) ===")
+        avoid_humans(scripted)
 
-    logger.info("=== Stage 4/4: THROW ===")
-    throw_ball(scripted, slew_clamp=cfg.throw_slew_clamp)
+        telemetry.log_stage("STAGE 4/4: THROW")
+        logger.info("=== Stage 4/4: THROW ===")
+        throw_ball(scripted, slew_clamp=cfg.throw_slew_clamp)
+
+        telemetry.log_stage("Demo complete")
+    finally:
+        telemetry.stop()
 
     logger.info("Demo complete")
 
@@ -112,6 +137,20 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
     )
     p.add_argument("--no-rerun", action="store_true", help="Disable Rerun visualization.")
     p.add_argument(
+        "--record-path",
+        default=None,
+        metavar="PATH",
+        help="Also/instead write stages 2-4's (turn/avoid/throw) Rerun stream to this .rrd "
+        "file (e.g. logs/demo.rrd), for offline analysis with query_demo.py. Independent of "
+        "the pickup stage's own separate telemetry session.",
+    )
+    p.add_argument(
+        "--no-display",
+        action="store_true",
+        help="With --record-path: write to disk only, don't spawn a live viewer window "
+        "(e.g. running headless on the robot itself).",
+    )
+    p.add_argument(
         "--dry-run-config",
         action="store_true",
         help="Print resolved config and exit (no robot).",
@@ -133,6 +172,8 @@ def parse_args(argv: list[str] | None = None) -> OrchestratorConfig:
         fps=args.fps,
         device=args.device,
         rerun=not args.no_rerun,
+        record_path=args.record_path,
+        display=not args.no_display,
         teleimager_host=args.teleimager_host,
         remote_server=args.remote_server,
         replay_trajectory=(

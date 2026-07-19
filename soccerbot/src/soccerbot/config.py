@@ -35,6 +35,8 @@ class OrchestratorConfig:
     fps: float = 30.0
     device: str | None = None
     rerun: bool = True
+    record_path: str | None = None  # --record-path: also/instead write stages 2-4 to an .rrd
+    display: bool = True  # --no-display: with record_path, skip spawning a live viewer window
     teleimager_host: str = "192.168.123.164"
     remote_server: str | None = None
     replay_trajectory: Path = DEFAULT_REPLAY_TRAJECTORY

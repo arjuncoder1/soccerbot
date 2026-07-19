@@ -36,11 +36,12 @@ def _import_human_detector():
     return HumanDetector
 
 
-def _confirm_clear(detector, distance_m: float) -> bool:
+def _confirm_clear(detector, distance_m: float, telemetry=None) -> bool:
     """Return True iff we see ``AVOID_CLEAR_CONFIRM_POLLS`` consecutive
     frames with no person within ``distance_m``, or the check times out
     (treated as clear rather than block the demo forever)."""
-    deadline = time.monotonic() + AVOID_CHECK_TIMEOUT_S
+    t0 = time.monotonic()
+    deadline = t0 + AVOID_CHECK_TIMEOUT_S
     clear_streak = 0
     polls = 0
     while time.monotonic() < deadline:
@@ -48,6 +49,14 @@ def _confirm_clear(detector, distance_m: float) -> bool:
         if snap is None:
             continue
         polls += 1
+        if telemetry is not None:
+            telemetry.log_detection(
+                step=polls,
+                elapsed_s=time.monotonic() - t0,
+                rgb=getattr(snap, "color_image", None),
+                nearest_m=(min(d.distance_m for d in snap.detections) if snap.detections else None),
+                n_people=len(snap.detections),
+            )
         if not snap.detections:
             clear_streak += 1
             logger.info("poll %d: no person (streak %d/%d)",
@@ -77,9 +86,10 @@ def _confirm_clear(detector, distance_m: float) -> bool:
 
 def avoid_humans(cfg: OrchestratorConfig) -> None:
     HumanDetector = _import_human_detector()
+    telemetry = getattr(cfg, "telemetry", None)
     with HumanDetector(host=cfg.teleimager_host) as detector:
         for cycle in range(1, AVOID_MAX_CYCLES + 1):
-            if _confirm_clear(detector, AVOID_CLEAR_DISTANCE_M):
+            if _confirm_clear(detector, AVOID_CLEAR_DISTANCE_M, telemetry=telemetry):
                 logger.info("Avoid stage clear on cycle %d", cycle)
                 return
             logger.info(

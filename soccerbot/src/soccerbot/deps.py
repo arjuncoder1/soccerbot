@@ -82,3 +82,13 @@ def import_scripted(name: str) -> ModuleType:
     """Import a scripted-behavior module by name (``avoid``, ``throw``, …)."""
     ensure_logic_imports()
     return importlib.import_module(name)
+
+
+def import_telemetry() -> ModuleType:
+    """Import ``local-vla-inference/telemetry.py`` directly (not via
+    :func:`import_local_vla_main`, which loads the much heavier ``main.py`` ACT
+    runner as a side effect). ``telemetry`` doesn't collide with any other
+    workspace module name, so a plain ``import telemetry`` after putting
+    ``LOCAL_VLA_DIR`` on ``sys.path`` is safe."""
+    _ensure_front(LOCAL_VLA_DIR)
+    return importlib.import_module("telemetry")

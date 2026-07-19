@@ -126,10 +126,27 @@ def turn_180_degrees(cfg: OrchestratorConfig) -> None:
 
             loco.Move(0.0, 0.0, TURN_YAW_RATE_RPS)
 
-            cur_yaw = float(arms.get_full_snapshot()["imu.yaw"])
+            snapshot = arms.get_full_snapshot()
+            cur_yaw = float(snapshot["imu.yaw"])
             step = _shortest_angle_delta(cur_yaw, prev_yaw)
             accumulated += abs(step)
             prev_yaw = cur_yaw
+
+            telemetry = getattr(cfg, "telemetry", None)
+            if telemetry is not None:
+                telemetry.log_arm_skeleton(snapshot)
+                telemetry.log_scalars(
+                    "turn/imu",
+                    {
+                        "roll": snapshot.get("imu.roll", 0.0),
+                        "pitch": snapshot.get("imu.pitch", 0.0),
+                        "yaw": snapshot.get("imu.yaw", 0.0),
+                    },
+                )
+                # The exact metric this loop's own stopping condition uses below
+                # (not a value re-derived after the fact) -- query_demo.py reads
+                # this to report turn accuracy against the real success criterion.
+                telemetry.log_scalars("turn", {"accumulated_deg": math.degrees(accumulated)})
 
             if (
                 abs(accumulated - TURN_TARGET_RAD) <= TURN_TOLERANCE_RAD

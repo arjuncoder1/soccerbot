@@ -191,6 +191,7 @@ def _interpolate_to(
     duration_s: float,
     control_dt: float = 0.02,
     slew_clamp: float = THROW_SLEW_CLAMP,
+    telemetry=None,
 ) -> None:
     """Linearly interpolate the 14 arm joints from ``start`` to ``target``.
 
@@ -212,12 +213,14 @@ def _interpolate_to(
         else:
             cmd = desired
         arms.send_arm_positions(cmd)
+        if telemetry is not None:
+            telemetry.log_arm_skeleton(cmd)
         elapsed = time.time() - step_start
         sleep_s = max(0.0, control_dt - elapsed)
         time.sleep(sleep_s)
 
 
-def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
+def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP, telemetry=None) -> None:
     """Run the gentle push against a connected, already-engaged ``G1Arms``.
 
     Reads the CURRENT arm position and treats it as the ball-holding pose --
@@ -225,6 +228,10 @@ def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
     briefly, then returns to the exact pose it started from. Assumes arm_sdk
     is already engaged (e.g. via ``arms.hold_current_pose()``); does not
     release it afterward -- the caller decides what happens next.
+
+    ``telemetry`` (optional, a ``local-vla-inference/telemetry.Telemetry``
+    instance) is a pure side-channel: logs the 3D arm skeleton every
+    interpolation step if given, changes nothing about the motion itself.
     """
     logger.info(
         "Starting gentle goalkeeper push from current arm position (slew=%.3f rad/step)",
@@ -239,13 +246,17 @@ def throw(arms, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
         follow_through_pose[key] = max(lo, min(hi, release_pose[key] + _FOLLOW_THROUGH_EXTRA_WRIST_PITCH))
 
     logger.info("-> release (%.2fs)", RELEASE_DURATION_S)
-    _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S, slew_clamp=slew_clamp)
+    _interpolate_to(arms, start_pose, release_pose, RELEASE_DURATION_S, slew_clamp=slew_clamp, telemetry=telemetry)
     logger.info("-> follow_through (%.2fs)", FOLLOW_THROUGH_DURATION_S)
     _interpolate_to(
-        arms, release_pose, follow_through_pose, FOLLOW_THROUGH_DURATION_S, slew_clamp=slew_clamp
+        arms, release_pose, follow_through_pose, FOLLOW_THROUGH_DURATION_S,
+        slew_clamp=slew_clamp, telemetry=telemetry,
     )
     logger.info("-> recover (%.2fs)", RECOVER_DURATION_S)
-    _interpolate_to(arms, follow_through_pose, start_pose, RECOVER_DURATION_S, slew_clamp=slew_clamp)
+    _interpolate_to(
+        arms, follow_through_pose, start_pose, RECOVER_DURATION_S,
+        slew_clamp=slew_clamp, telemetry=telemetry,
+    )
     logger.info("Push complete.")
 
 
@@ -266,7 +277,7 @@ def throw_ball(cfg, *, slew_clamp: float = THROW_SLEW_CLAMP) -> None:
     hold = dict(arms.get_arm_positions())
     arms.send_arm_positions(hold, weight=1.0)
     try:
-        throw(arms, slew_clamp=slew_clamp)
+        throw(arms, slew_clamp=slew_clamp, telemetry=getattr(cfg, "telemetry", None))
     finally:
         # Leave engaged — caller / orchestrator owns teardown + Ctrl+C reset.
         pass
