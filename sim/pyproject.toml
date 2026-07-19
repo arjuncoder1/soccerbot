@@ -8,3 +8,7 @@ dependencies = []
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Flat package layout (modules live next to this pyproject, not under src/).
+[tool.hatch.build.targets.wheel]
+packages = ["."]
