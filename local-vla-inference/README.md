@@ -31,6 +31,9 @@ no ImageServer):
 export CYCLONEDDS_HOME=$HOME/cyclonedds/install
 ./local-vla-inference/run.sh --iface eth0
 ./local-vla-inference/run.sh --dry-run
+# Real camera + arm angles, print predicted joint trajectory; never commands motors
+./local-vla-inference/run.sh --image-no-motors --iface eth0 --layout 14d \
+  --policy /path/to/pretrained_model
 ```
 
 ## Diagnosis (read-only, sends nothing to the robot)

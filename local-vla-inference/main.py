@@ -135,6 +135,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Load policy and print one fake forward pass; do not connect hardware.",
     )
+    p.add_argument(
+        "--image-no-motors",
+        action="store_true",
+        help="Read one real camera frame + arm angles (rt/lowstate), run policy, print the "
+        "predicted action chunk; never publish rt/arm_sdk / never command motors.",
+    )
     return p.parse_args(argv)
 
 
@@ -191,10 +197,97 @@ def dry_run(layout: ModuleType, policy, preprocess, postprocess, device: torch.d
     logger.info("Sample arm action: %s", {k: round(dds_action[k], 4) for k in arm_keys[:4]})
 
 
+def _format_joint_row(dds_action: dict[str, float], arm_keys: list[str]) -> str:
+    return " ".join(f"{k.removesuffix('.q')}={dds_action[k]:+.4f}" for k in arm_keys)
+
+
+def print_action_trajectory(
+    layout: ModuleType,
+    policy,
+    preprocess,
+    postprocess,
+    features: dict,
+    observation: dict[str, Any],
+    device: torch.device,
+    measured: dict[str, float] | None = None,
+) -> None:
+    """Run one ACT chunk prediction and print joint angles in policy units (radians)."""
+    from lerobot.policies.utils import build_inference_frame, make_robot_action
+
+    arm_keys = [f"{j}.q" for j in layout.ARM_JOINTS]
+    if measured is not None:
+        logger.info("Measured arm q (rad): %s", _format_joint_row(measured, arm_keys))
+
+    frame = build_inference_frame(observation=observation, ds_features=features, device=device)
+    batch = preprocess(frame)
+    with torch.inference_mode():
+        chunk = policy.predict_action_chunk(batch)  # (B, T, action_dim)
+
+    # Postprocess each horizon step the same way the live loop unnormalizes actions.
+    n_steps = int(chunk.shape[1])
+    logger.info(
+        "Predicted action chunk: %d steps × %d arm joints (radians, policy units). "
+        "No motor commands will be sent.",
+        n_steps,
+        len(arm_keys),
+    )
+    for t in range(n_steps):
+        action_t = postprocess(chunk[:, t])
+        robot_action = make_robot_action(action_t, features)
+        dds_action = action_to_dds(layout, robot_action)
+        print(f"step {t:03d}: {_format_joint_row(dds_action, arm_keys)}", flush=True)
+
+
+def image_no_motors(
+    args: argparse.Namespace,
+    layout: ModuleType,
+    policy,
+    preprocess,
+    postprocess,
+    features: dict,
+    pack_obs,
+    device: torch.device,
+) -> None:
+    """Real camera + read-only lowstate → print predicted trajectory. Never write motors."""
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+
+    if args.iface:
+        ChannelFactoryInitialize(0, args.iface)
+    else:
+        ChannelFactoryInitialize(0)
+
+    arms = G1Arms(kp=args.kp, kd=args.kd)
+    front = make_front_camera(args.camera)
+    # state_only: subscribe rt/lowstate only — arm_sdk publisher is never created.
+    arms.connect(state_only=True)
+    front.connect()
+
+    try:
+        h, w, _ = layout.IMAGE_SHAPE
+        front_rgb = front.read_resized(h, w)
+        measured = arms.get_arm_positions()
+        obs = pack_obs(measured, front_rgb)
+        logger.info(
+            "image-no-motors: got camera frame shape=%s and %d arm joints; running policy",
+            front_rgb.shape,
+            len(measured),
+        )
+        print_action_trajectory(
+            layout, policy, preprocess, postprocess, features, obs, device, measured=measured
+        )
+    finally:
+        front.disconnect()
+        arms.disconnect()  # state_only: no release / no arm_sdk writes
+    logger.info("image-no-motors done (no motors commanded)")
+
+
 def run(args: argparse.Namespace) -> None:
     from lerobot.policies import make_pre_post_processors
     from lerobot.policies.act import ACTPolicy
     from lerobot.policies.utils import build_inference_frame, make_robot_action
+
+    if args.dry_run and args.image_no_motors:
+        raise SystemExit("Use either --dry-run or --image-no-motors, not both.")
 
     layout = load_layout(args.layout)
     default_policy = getattr(layout, "DEFAULT_POLICY_ID", None)
@@ -223,6 +316,10 @@ def run(args: argparse.Namespace) -> None:
 
     if args.dry_run:
         dry_run(layout, policy, preprocess, postprocess, device)
+        return
+
+    if args.image_no_motors:
+        image_no_motors(args, layout, policy, preprocess, postprocess, features, pack_obs, device)
         return
 
     # One DDS init per process; shared by arms + camera clients.
