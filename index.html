@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Soccerbot — Unitree G1 Goalkeeper</title>
+<meta name="description" content="A Unitree G1 humanoid that picks up a soccer ball and plays goalkeeper: learned pickup policy, human-aware scripted behavior, and teleop-data augmentation." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-brand"><span class="dot"></span> SOCCERBOT</div>
+  <div class="nav-links">
+    <a href="#collection">Data</a>
+    <a href="#rerun">Rerun</a>
+    <a href="#augment">Augmentation</a>
+    <a href="#detection">Human Detection</a>
+    <a href="#models">Models</a>
+    <a href="#architecture">Architecture</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/arjuncoder1/soccerbot" target="_blank" rel="noopener">GitHub ↗</a>
+</nav>
+
+<!-- ================= HERO : scripted messi_bot(3s) -> YouTube reel ================= -->
+<header class="hero" id="hero">
+  <div class="hero-stage">
+    <video id="heroVideo" class="hero-media active" muted playsinline autoplay preload="auto">
+      <source src="assets/videos/messi_bot.mp4" type="video/mp4" />
+    </video>
+    <div id="heroYtWrap">
+      <iframe id="heroYt"
+        src=""
+        title="Soccerbot reel"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen>
+      </iframe>
+    </div>
+  </div>
+  <div class="hero-scrim"></div>
+  <button class="hero-tap" id="heroSkip">watch reel →</button>
+  <div class="hero-content">
+    <div class="hero-eyebrow">Unitree G1 · Learned pickup + scripted goalkeeper</div>
+    <h1 class="hero-title">It picks up the ball.<br>Then it guards the goal.</h1>
+    <p class="hero-sub">A humanoid robot that learns to pick a soccer ball off a table with a fine-tuned vision-action policy, then runs a hardcoded goalkeeper sequence — turn, watch, shuffle, throw — entirely decoupled from the model.</p>
+    <div class="hero-badges">
+      <span class="badge">14-DOF arms-only policy</span>
+      <span class="badge">RGB-D human detection</span>
+      <span class="badge">122 teleop episodes</span>
+      <span class="badge">KITE-ML augmentation</span>
+    </div>
+  </div>
+  <div class="hero-progress">
+    <div class="seg" id="segClip"><i></i></div>
+    <div class="seg" id="segReel"><i></i></div>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= ABOUT (from GitHub README) ================= -->
+<section id="about" class="tight">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker"><span class="num">00</span> Overview</div>
+      <h2 class="section-title">The task, precisely</h2>
+    </div>
+    <div class="split">
+      <div class="col-text reveal">
+        <p class="section-desc"><strong>Phase 1 — learned pickup.</strong> The robot sees a ball on a table of fixed height and picks it up. This is the only part learned from demonstrations, driving a 14-DOF arms-only action space (7 DOF per arm — shoulder pitch/roll/yaw, elbow, wrist roll/pitch/yaw). No waist, legs, or fingers are in the learned policy; the hand is held in a fixed pose and grasping is achieved through arm positioning alone.</p>
+        <p class="section-desc"><strong>Phase 2 — scripted goalkeeper.</strong> A fixed number of timesteps after pickup finishes, a hardcoded FSM takes over: turn 180°, watch for a person with the depth-sense camera, shuffle side to side while someone is detected, and once no person has been seen for 6 continuous seconds, throw the ball straight ahead along a fixed trajectory.</p>
+        <p class="section-desc">The two phases are deliberately separate systems — the scripted goalkeeper has no VLA/model dependency at all, and the pickup policy never touches the throw logic.</p>
+      </div>
+      <div class="col-media reveal">
+        <div class="media-frame" style="padding:26px 22px; background:var(--bg-elev);">
+          <div class="pill-list" style="margin-top:0;">
+            <span class="pill">Unitree G1 humanoid</span>
+            <span class="pill">Single RGB-D camera (pickup vision + human depth)</span>
+            <span class="pill">BrainCo Revo 2 hands (no learned grasping)</span>
+            <span class="pill">uv workspace, Modal GPU training</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DATA COLLECTION ================= -->
+<section id="collection">
+  <div class="wrap">
+    <div class="split">
+      <div class="col-media reveal">
+        <div class="media-frame">
+          <video controls playsinline preload="metadata">
+            <source src="assets/videos/data_collection.mp4" type="video/mp4" />
+          </video>
+          <div class="media-caption">
+            <span>data_collection.mp4</span>
+            <span>teleop capture session</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-text reveal">
+        <div class="kicker"><span class="num">01</span> Data Collection</div>
+        <h2 class="section-title">Teleop episodes, one pickup at a time</h2>
+        <p class="section-desc">Every training episode starts as a human-teleoperated demonstration of the G1 picking a ball off the table, recorded in LeRobot dataset format alongside synchronized RGB frames and 14-D arm state/action pairs. This raw teleop footage is the foundation both policies below were fine-tuned on.</p>
+        <div class="pill-list">
+          <span class="pill">122 episodes collected</span>
+          <span class="pill">LeRobot v3.0 format</span>
+          <span class="pill">14-D state/action, arms-only</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= RERUN VIEWER ================= -->
+<section id="rerun">
+  <div class="wrap">
+    <div class="split reverse">
+      <div class="col-media reveal">
+        <div class="media-frame">
+          <video controls playsinline preload="metadata">
+            <source src="assets/videos/rerun_vid.mov" type="video/quicktime" />
+            <source src="assets/videos/rerun_vid.mov" type="video/mp4" />
+            Your browser can't preview this file inline —
+            <a href="assets/videos/rerun_vid.mov">download rerun_vid.mov</a> to watch it.
+          </video>
+          <div class="media-caption">
+            <span>rerun vid.mov</span>
+            <span>Rerun viewer walkthrough</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-text reveal">
+        <div class="kicker"><span class="num">02</span> Inspecting recorded data</div>
+        <h2 class="section-title">Every episode, replayed in Rerun</h2>
+        <p class="section-desc">Recorded teleop and inference runs are logged into <a href="https://rerun.io" target="_blank" rel="noopener">Rerun</a> — camera frames, 14-D joint state/action curves, and stage telemetry (turn / avoid / throw) all synced on one timeline. A custom Blueprint and a small Query API script make it fast to scrub through an episode and see exactly what the policy saw and did at each timestep.</p>
+        <div class="pill-list">
+          <span class="pill">Custom Rerun Blueprint</span>
+          <span class="pill">Turn / avoid / throw telemetry</span>
+          <span class="pill">Query API tooling</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AUGMENTATION (KITE-ML) ================= -->
+<section id="augment">
+  <div class="wrap">
+    <div class="split">
+      <div class="col-media reveal">
+        <div class="media-frame">
+          <video controls playsinline preload="metadata">
+            <source src="assets/videos/augmented_episodes.mp4" type="video/mp4" />
+          </video>
+          <div class="media-caption">
+            <span>5 augmented episodes, back-to-back</span>
+            <span class="src-link"><a href="https://huggingface.co/datasets/AmoghShrivastava1/g1_final_cleaned-augmented" target="_blank" rel="noopener">HF dataset ↗</a></span>
+          </div>
+        </div>
+      </div>
+      <div class="col-text reveal">
+        <div class="kicker"><span class="num">03</span> Environment augmentation</div>
+        <h2 class="section-title">Making 122 episodes cover more than 122 rooms</h2>
+        <p class="section-desc">Real teleop demonstrations are all recorded in one physical setup, which leaves a policy brittle to lighting, background, and scene changes it never saw. We use <strong>KITE-ML</strong> to augment the recorded teleop episodes against environment variation, generating new synthetic-but-grounded versions of each demonstration while preserving the original action labels.</p>
+        <p class="section-desc">The augmented set is published as <a href="https://huggingface.co/datasets/AmoghShrivastava1/g1_final_cleaned-augmented" target="_blank" rel="noopener"><code>g1_final_cleaned-augmented</code></a> on Hugging Face — the clip on the left plays five augmented episodes straight through.</p>
+        <div class="pill-list">
+          <span class="pill">KITE-ML augmentation</span>
+          <span class="pill">Action labels preserved</span>
+          <span class="pill">Published to Hugging Face Hub</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HUMAN DETECTION ================= -->
+<section id="detection">
+  <div class="wrap">
+    <div class="split reverse">
+      <div class="col-media reveal">
+        <div class="media-frame">
+          <video controls playsinline preload="metadata">
+            <source src="assets/videos/human_detection.mp4" type="video/mp4" />
+          </video>
+          <div class="media-caption">
+            <span>human_detection.mp4</span>
+            <span>depth-based presence check</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-text reveal">
+        <div class="kicker"><span class="num">04</span> Human-aware goalkeeper</div>
+        <h2 class="section-title">See a person, shuffle to stay clear</h2>
+        <p class="section-desc">During the scripted goalkeeper phase, the same RGB-D camera used for pickup switches roles and watches for people using its depth stream. Whenever a person is detected, the robot shuffles side to side — the same goalkeeper motion, repurposed to keep the human out of its throwing lane. Once no one has been detected for 6 continuous seconds, it commits to the fixed throw trajectory.</p>
+        <div class="pill-list">
+          <span class="pill">Depth-based detection</span>
+          <span class="pill">Side-to-side shuffle avoidance</span>
+          <span class="pill">6s clear-timeout before throw</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= MODELS ================= -->
+<section id="models">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker"><span class="num">05</span> Models trained</div>
+      <h2 class="section-title">Two policy families, one winner</h2>
+      <p class="section-desc">Both candidates were fine-tuned on the same 14-D arms-only pickup task. ACT won out and became the deployed pickup policy; the augmented dataset above exists specifically to make that policy more robust before further training.</p>
+    </div>
+
+    <div class="model-grid">
+      <div class="model-card reveal">
+        <h3>Pi 0.5</h3>
+        <p>Vision-language-action policy evaluated as a candidate for the learned pickup phase.</p>
+        <div class="stat-row">
+          <div class="stat"><b>Candidate</b><span>Status</span></div>
+        </div>
+      </div>
+
+      <div class="model-card chosen reveal">
+        <span class="chosen-tag">Deployed</span>
+        <h3>ACT</h3>
+        <p>Action-chunking transformer, fine-tuned on real G1 teleop demonstrations — selected as the pickup policy.</p>
+        <div class="stat-row">
+          <div class="stat"><b>15k</b><span>Fine-tune steps</span></div>
+          <div class="stat"><b>122</b><span>Teleop episodes</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-note reveal">
+      <span class="ico">↳</span>
+      <span>We ended up choosing the <strong>15k-step fine-tuned ACT policy</strong>, trained on <strong>122 teleop episodes</strong>, over Pi 0.5. That same 122-episode set is then run through KITE-ML augmentation (see above) to account for environment changes — new lighting, backgrounds, and scene variation — before further training passes.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ARCHITECTURE (from GitHub README) ================= -->
+<section id="architecture" class="tight">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker"><span class="num">06</span> Architecture</div>
+      <h2 class="section-title">How the pieces fit together</h2>
+      <p class="section-desc">Pulled from the project's <a href="https://github.com/arjuncoder1/soccerbot" target="_blank" rel="noopener">GitHub README</a> — the pickup policy and the goalkeeper FSM are intentionally decoupled systems.</p>
+    </div>
+
+    <div class="arch-diagram reveal">                     ┌─────────────────────────┐
+  100 real demo      │   training/ (Modal)      │
+  episodes  ───────▶ │   fine-tune policy       │──▶ checkpoint (HF Hub / Modal volume)
+                      │   on G1 arms-only 14-D   │
+                      └─────────────────────────┘
+                                                              │
+                                                              ▼
+                     ┌─────────────────────────┐    ┌──────────────────────────┐
+  robot sensors ───▶ │   local-vla-inference/   │───▶│  scripted-behavior/      │
+  (RGB-D camera,     │   loads checkpoint, runs │    │  hardcoded FSM: turn,    │
+  arm state)         │   policy on real G1 arms │    │  detect, shuffle, throw  │
+                     │   for the pickup phase   │    │  (no model, no learning) │
+                     └─────────────────────────┘    └──────────────────────────┘</div>
+
+    <table class="stack-table reveal">
+      <thead><tr><th>Component</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>training/</code></td><td class="status-ok">● implemented</td><td>Modal launcher that submits LeRobot fine-tuning jobs (ACT, Pi 0.5, and others) to GPU workers.</td></tr>
+        <tr><td><code>thirdparty/lerobot/</code></td><td class="status-ok">● vendored</td><td>Hugging Face LeRobot — datasets, policies, training loop.</td></tr>
+        <tr><td><code>local-vla-inference/</code></td><td class="status-todo">○ in progress</td><td>Real-time control loop: load the fine-tuned checkpoint, drive the G1's arms via <code>unitree_sdk2py</code> for pickup.</td></tr>
+        <tr><td><code>scripted-behavior/</code></td><td class="status-ok">● implemented</td><td>Hardcoded post-pickup FSM — turn 180°, depth-based human detection, shuffle, 6s-timeout throw.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>© Soccerbot — Unitree G1 goalkeeper project</div>
+    <div class="foot-links">
+      <a href="https://github.com/arjuncoder1/soccerbot" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/datasets/AmoghShrivastava1/g1_final_cleaned-augmented" target="_blank" rel="noopener">HF Dataset</a>
+      <a href="https://youtu.be/B6rOcKDwPHQ" target="_blank" rel="noopener">Reel</a>
+    </div>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
