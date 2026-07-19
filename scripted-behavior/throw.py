@@ -69,6 +69,7 @@ import sys
 import time
 from pathlib import Path
 
+from dds import ensure_dds
 from g1_arm_fk import LEFT_ARM, RIGHT_ARM, check_limits, left_elbow_position, left_hand_position
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,16 @@ logger = logging.getLogger(__name__)
 # local-vla-inference package. Import it from there instead of duplicating its
 # DDS plumbing here -- both packages run on the same robot machine.
 _LOCAL_VLA_INFERENCE_DIR = Path(__file__).resolve().parent.parent / "local-vla-inference"
+
+
+def _import_g1_arms():
+    """Load ``G1Arms`` from the sibling local-vla-inference package."""
+    sys.path.insert(0, str(_LOCAL_VLA_INFERENCE_DIR))
+    try:
+        from g1_arms import G1Arms  # type: ignore[import-not-found]
+    finally:
+        sys.path.pop(0)
+    return G1Arms
 
 # G1 arm joint names (matches g1_arm_fk.py / g1_arms.ARM_JOINT_INDEX /
 # local-vla-inference/embodiment_g1d_16d.py ARM_JOINTS). Keys used throughout
@@ -198,6 +209,26 @@ def _interpolate_to(
         time.sleep(sleep_s)
 
 
+def throw_ball(cfg) -> None:
+    """Orchestrator entry point: engage arms (if needed) and run ``throw``.
+
+    ``cfg`` is an ``OrchestratorConfig`` (duck-typed so this module's
+    import-time FK self-check does not depend on ``config``).
+    """
+    g1_arms_cls = _import_g1_arms()
+    ensure_dds(cfg.iface)
+    arms = g1_arms_cls(kp=60.0, kd=1.5)
+    arms.connect()
+    try:
+        # Keep arm_sdk engaged across the prior stages: a single weight=1
+        # publish is a no-op if already engaged (see turn_180.py).
+        hold = dict(arms.get_arm_positions())
+        arms.send_arm_positions(hold, weight=1.0)
+        throw(arms)
+    finally:
+        arms.disconnect()
+
+
 def throw(arms) -> None:
     """Run the gentle push against a connected, already-engaged ``G1Arms``.
 
@@ -284,16 +315,10 @@ def _run_standalone(args: argparse.Namespace) -> None:
     release. Not what the eventual FSM will do (it should stay engaged
     across steps) -- this is just for exercising the push in isolation.
     """
-    sys.path.insert(0, str(_LOCAL_VLA_INFERENCE_DIR))
-    from g1_arms import G1Arms  # noqa: E402
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize  # noqa: E402
+    g1_arms_cls = _import_g1_arms()
+    ensure_dds(args.iface)
 
-    if args.iface:
-        ChannelFactoryInitialize(0, args.iface)
-    else:
-        ChannelFactoryInitialize(0)
-
-    arms = G1Arms(kp=args.kp, kd=args.kd)
+    arms = g1_arms_cls(kp=args.kp, kd=args.kd)
     arms.connect()
     arms.hold_current_pose(ramp_s=2.0)
     try:

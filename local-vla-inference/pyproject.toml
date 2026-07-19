@@ -8,7 +8,9 @@ requires-python = ">=3.12"
 dependencies = [
     "lerobot",
     "pyzmq>=26.0.0",
-    "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
+    # cyclonedds 0.10.2 (pulled by unitree_sdk2py) has no usable 3.13 build in
+    # cloud/dev. Keep unitree on the robot path (Python 3.12) only.
+    "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git ; python_full_version < '3.13'",
 ]
 
 [tool.uv.sources]
