@@ -11,8 +11,12 @@ const io = new IntersectionObserver((entries) => {
 }, { threshold: 0.15 });
 revealEls.forEach(el => io.observe(el));
 
-// ---------- hero video: autoplay + native loop ----------
+// ---------- hero video: autoplay, loop just the first few seconds ----------
+const HERO_CLIP_SECONDS = 4;
 const heroVideo = document.getElementById('heroVideo');
+heroVideo.addEventListener('timeupdate', () => {
+  if (heroVideo.currentTime >= HERO_CLIP_SECONDS) heroVideo.currentTime = 0;
+});
 heroVideo.play().catch(() => {
   const kick = () => { heroVideo.play().catch(() => {}); document.removeEventListener('click', kick); };
   document.addEventListener('click', kick, { once: true });
