@@ -87,26 +87,6 @@
   </div>
 </section>
 
-<!-- ================= LIVE DEMO ================= -->
-<section id="live-demo">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <div class="kicker"><span class="num">01</span> Live demo</div>
-      <h2 class="section-title">Our actual hackathon demo</h2>
-      <p class="section-desc">Not a highlight reel — this is the full run as it happened live, in front of judges.</p>
-    </div>
-    <div class="media-frame reveal">
-      <video controls playsinline preload="metadata">
-        <source src="assets/videos/live_demo.mp4" type="video/mp4" />
-      </video>
-      <div class="media-caption">
-        <span>live_demo.mp4</span>
-        <span><a class="src-link" href="https://x.com/aryanmangal769/status/2078934029571928404" target="_blank" rel="noopener">original post ↗</a></span>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ================= DATA COLLECTION ================= -->
 <section id="collection">
   <div class="wrap">
@@ -123,7 +103,7 @@
         </div>
       </div>
       <div class="col-text reveal">
-        <div class="kicker"><span class="num">02</span> Data Collection</div>
+        <div class="kicker"><span class="num">01</span> Data Collection</div>
         <h2 class="section-title">Teleop episodes, one pickup at a time</h2>
         <p class="section-desc">Every training episode starts as a human-teleoperated demonstration of the G1 picking a ball off the table, recorded in LeRobot dataset format alongside synchronized RGB frames and 14-D arm state/action pairs. Getting here took a lot of trial and error on calibration and teleop mimicry (see <a href="#challenges">Challenges</a>) — the payoff was <a href="https://huggingface.co/datasets/ajkoder/g1_final_cleaned" target="_blank" rel="noopener">150 good samples</a>, of which 122 episodes went into the ACT fine-tune below.</p>
         <div class="pill-list">
@@ -156,7 +136,7 @@
         </div>
       </div>
       <div class="col-text reveal">
-        <div class="kicker"><span class="num">03</span> Inspecting recorded data</div>
+        <div class="kicker"><span class="num">02</span> Inspecting recorded data</div>
         <h2 class="section-title">Live runs played in Rerun</h2>
         <p class="section-desc">Recorded teleop and inference runs are logged into <a href="https://rerun.io" target="_blank" rel="noopener">Rerun</a> — camera frames, 14-D joint state/action curves, and stage telemetry (turn / avoid / throw) all synced on one timeline. A custom Blueprint and a small Query API script make it fast to scrub through an episode and see exactly what the policy saw and did at each timestep.</p>
         <div class="pill-list">
@@ -185,7 +165,7 @@
         </div>
       </div>
       <div class="col-text reveal">
-        <div class="kicker"><span class="num">04</span> Environment augmentation</div>
+        <div class="kicker"><span class="num">03</span> Environment augmentation</div>
         <h2 class="section-title">Making 122 episodes cover more than 122 rooms</h2>
         <p class="section-desc">Real teleop demonstrations are all recorded in one physical setup, which leaves a policy brittle to lighting, background, and scene changes it never saw. We use <strong>KITE-ML</strong> to augment the recorded teleop episodes against environment variation, generating new synthetic-but-grounded versions of each demonstration while preserving the original action labels.</p>
         <p class="section-desc">The augmented set is published as <a href="https://huggingface.co/datasets/AmoghShrivastava1/g1_final_cleaned-augmented" target="_blank" rel="noopener"><code>g1_final_cleaned-augmented</code></a> on Hugging Face — the clip on the left plays five augmented episodes straight through.</p>
@@ -215,7 +195,7 @@
         </div>
       </div>
       <div class="col-text reveal">
-        <div class="kicker"><span class="num">05</span> Human-aware goalkeeper</div>
+        <div class="kicker"><span class="num">04</span> Human-aware goalkeeper</div>
         <h2 class="section-title">See a person, shuffle to stay clear</h2>
         <p class="section-desc">During the scripted goalkeeper phase, the same RGB-D camera used for pickup switches roles and watches for people using its depth stream. Whenever a person is detected, the robot shuffles side to side — the same goalkeeper motion, repurposed to keep the human out of its throwing lane. Once no one has been detected for 6 continuous seconds, it commits to the fixed throw trajectory.</p>
         <div class="pill-list">
@@ -232,7 +212,7 @@
 <section id="models">
   <div class="wrap">
     <div class="section-head reveal">
-      <div class="kicker"><span class="num">06</span> Models trained</div>
+      <div class="kicker"><span class="num">05</span> Models trained</div>
       <h2 class="section-title">Three policy families, one winner</h2>
       <p class="section-desc">Pi 0.5, MolmoAct2, and ACT were all fine-tuned on the same 14-D arms-only pickup task and compared head-to-head. ACT-based policies came out on top; the plain ACT checkpoint became the deployed pickup policy, and the augmented dataset above exists specifically to make it more robust before further training.</p>
     </div>
@@ -268,6 +248,25 @@
     <div class="pipeline-note reveal">
       <span class="ico">↳</span>
       <span>We ended up choosing the <strong>15k-step fine-tuned ACT policy</strong>, trained on <strong>122 teleop episodes</strong>, over Pi 0.5 and MolmoAct2. That same 122-episode set is then run through KITE-ML augmentation (see above) to account for environment changes — new lighting, backgrounds, and scene variation — before further training passes.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= LIVE DEMO ================= -->
+<section id="live-demo">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker"><span class="num">06</span> Live demo</div>
+      <h2 class="section-title">Our actual hackathon demo</h2>
+    </div>
+    <div class="media-frame reveal">
+      <video controls playsinline preload="metadata">
+        <source src="assets/videos/live_demo.mp4" type="video/mp4" />
+      </video>
+      <div class="media-caption">
+        <span>live_demo.mp4</span>
+        <span><a class="src-link" href="https://x.com/aryanmangal769/status/2078934029571928404" target="_blank" rel="noopener">original post ↗</a></span>
+      </div>
     </div>
   </div>
 </section>
