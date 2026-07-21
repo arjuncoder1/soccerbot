@@ -12,7 +12,7 @@ const io = new IntersectionObserver((entries) => {
 revealEls.forEach(el => io.observe(el));
 
 // ---------- hero video: autoplay, loop just the first few seconds ----------
-const HERO_CLIP_SECONDS = 3;
+const HERO_CLIP_SECONDS = 4;
 const heroVideo = document.getElementById('heroVideo');
 heroVideo.addEventListener('timeupdate', () => {
   if (heroVideo.currentTime >= HERO_CLIP_SECONDS) heroVideo.currentTime = 0;
