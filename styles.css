@@ -104,9 +104,6 @@ a:hover { text-decoration: underline; }
   transition: opacity 0.9s ease;
 }
 .hero-media.active { opacity: 1; }
-#heroYtWrap { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s ease; pointer-events: none; }
-#heroYtWrap.active { opacity: 1; pointer-events: auto; }
-#heroYtWrap iframe { position: absolute; top: 50%; left: 50%; width: 177.78vh; height: 100vh; min-width: 100%; min-height: 56.25vw; transform: translate(-50%, -50%); border: 0; }
 
 .hero-scrim {
   position: absolute; inset: 0;
